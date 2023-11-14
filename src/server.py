@@ -6,6 +6,10 @@ class Server:
         # encryption and signature of this is maintained separately by the server
         self.ratings = [[]]
         
+        self.filled_entries_bool = [[]]
+        
+        # it does not make sense for us to have a matrix of bools where each bool is a 0 or 1 since ideally we wanna generate train test splits of indices + we need the ability to perform encryptions with the encryption key so we would be able to determine which entries are 0 and 1 anyways by manually checking against each row.
+        
     # adds a new col
     def add_movie(self):
         # TODO: looking at the matrix completion assignment from 1952q, figure out what the default value should be

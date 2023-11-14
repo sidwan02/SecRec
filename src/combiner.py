@@ -21,8 +21,6 @@ class Combiner:
         self.setup_server_storage({}, "user-ownership")
         # {movie: col_id}
         self.setup_server_storage({}, "movie-ownership")
-        # {user: set(filled entries: tuple(int, int))}
-        self.setup_server_storage({}, "owned-entries")
         
     def setup_server_storage(self, data, description):
         palintext = util.ObjectToBytes(data)
@@ -76,7 +74,7 @@ class Combiner:
             self.server.add_user()
             user_ownership_map[user] = len(user_ownership_map)
             self.server_store(user_ownership_map, "user-ownership")
-            
+        
         self.server.add_rating(rating, user_ownership_map[user], movie_ownership_map[movie])
 
     def receive_rating(self, movie: str, username: str) -> Union[None, float]:
