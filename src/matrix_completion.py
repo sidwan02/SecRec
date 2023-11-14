@@ -4,6 +4,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 from support import crypto, util
 
+class SecureSVD:
+    def __init__(self, A, r: int):
+        # same api as: 
+        # U, S, vT = slinalg.svds(ratings, self.r)
+        pass
+
+class SecureMatrixMultiplication:
+    def __init__(self, A, B):
+        pass
+
+class SecureClip:
+    def __init__(self, min: float, x: float, max: float):
+        pass
 
 class SecureMatrixCompletion:
     def __init__(self, ratings, filled_entries_bool, r, epochs, alpha, encrypt_pk: crypto.AsmPublicKey):
@@ -46,9 +59,9 @@ class SecureMatrixCompletion:
                 self.indices_mat[r][c] = (r, c)
         
         perm = np.random.permutation(len(self.M))
-        self.M = M_flat[perm].reshape(self.M.shape)
-        self.filled = filled_flat[perm].reshape(self.filled.shape)
-        self.indices = self.indices_mat.flatten()[perm].reshape(self.indices_mat.shape)
+        self.shuffled_rankings = M_flat[perm].reshape(self.M.shape)
+        self.shuffled_filled = filled_flat[perm].reshape(self.filled.shape)
+        self.shuffled_indices = self.indices_mat.flatten()[perm].reshape(self.indices_mat.shape)
         
     def train(self):
         for cur_i in range(1, self.epochs + 1):
@@ -61,14 +74,16 @@ class SecureMatrixCompletion:
 
     def sgd(self):
         for s_no, (M_i_j, (i, j), is_filled) in enumerate(
-            zip(self.M, self.indices, self.filled)
+            zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
         ):
             # there is no update to M if the value is not filled
             e_i_j = (M_i_j - self.get_rating(i, j)) * is_filled
 
             # gradient update rules derived from the loss function relation, derivation in the pdf
-            self.X[i, :] += self.alpha * 2 * e_i_j * self.Y[j, :]
-            self.Y[j, :] += self.alpha * 2 * e_i_j * self.X[i, :]
+            # recall that both self.X and self.Y have the same number of cols
+            for c in range(self.r):
+                self.X[i, c] += self.alpha * 2 * e_i_j * self.Y[j, c]
+                self.Y[j, c] += self.alpha * 2 * e_i_j * self.X[i, c]
 
             # for debugging purposes to see how far we are into the sgd
             if s_no % 100000 == 0:
