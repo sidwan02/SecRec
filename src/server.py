@@ -20,7 +20,7 @@ class Server:
         self.ratings.append([None for _ in range(num_movies)])
         
     def add_rating(self, rating: float, r: int, c: int):
-        pass
+        self.ratings[r][c] = rating
     
     def matrix_completion(self):
         pass
