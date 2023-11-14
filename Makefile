@@ -11,6 +11,9 @@ setup:
 	. $(ENV)/bin/activate;	\
 	pip install -r requirements.txt;
 
+activate:
+	. $(ENV)/bin/activate;
+
 # Run all unittests
 # run "python3 -m unittest --help" for more options
 # on how to run unit tests
