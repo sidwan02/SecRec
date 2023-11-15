@@ -15,10 +15,10 @@ class KeyDB:
 
 
 class Combiner:
-    def __init__(self, server: Server, encryptk):
+    def __init__(self, server: Server, public_context: bytes):
         self.server = server
         self.keyDB = KeyDB()
-        self.encryptk = encryptk
+        self.encrypt_pk = ts.context_from(public_context)
 
         # {user: row_id}
         self.setup_server_storage({}, "user-ownership")
@@ -26,13 +26,13 @@ class Combiner:
         self.setup_server_storage({}, "movie-ownership")
 
     def setup_server_storage(self, data, description):
-        palintext = util.ObjectToBytes(data)
+        plaintext = util.ObjectToBytes(data)
 
         data_encryptk, data_decryptk = crypto.AsymmetricKeyGen()
         data_verifyk, data_signk = crypto.SignatureKeyGen()
 
         # sign the plaintext
-        data_sign = crypto.SignatureSign(data_signk, palintext)
+        data_sign = crypto.SignatureSign(data_signk, plaintext)
 
         # concat the sign to the plaintext, then encrypt
         ciphertext = crypto.AsymmetricEncrypt(data_encryptk, data + data_sign)
@@ -45,11 +45,11 @@ class Combiner:
         self.keyDB.keys[f"{description}-verifyk"] = data_verifyk
 
     def server_store(self, data, description):
-        palintext = util.ObjectToBytes(data)
+        plaintext = util.ObjectToBytes(data)
 
         # sign the plaintext
         data_sign = crypto.SignatureSign(
-            self.keyDB.keys[f"{description}-signk"], palintext
+            self.keyDB.keys[f"{description}-signk"], plaintext
         )
 
         # concat the sign to the plaintext, then encrypt
@@ -72,7 +72,7 @@ class Combiner:
 
         return util.BytesToObject(plaintext)
 
-    def handle_rating(self, movie: str, rating: float, user: str):
+    def handle_rating(self, movie: str, rating: bytes, user: str):
         movie_ownership_map = self.retrieve_server_storage("movie-ownership")
         user_ownership_map = self.retrieve_server_storage("user-ownership")
 
@@ -86,7 +86,7 @@ class Combiner:
             user_ownership_map[user] = len(user_ownership_map)
             self.server_store(user_ownership_map, "user-ownership")
 
-        one_encrypted = ts.ckks_vector(self.encryptk, [1])
+        one_encrypted = ts.ckks_vector(self.encrypt_pk, [1])
 
         self.server.modify_filled(
             one_encrypted.serialize(),

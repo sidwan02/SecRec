@@ -2,10 +2,15 @@ import numpy as np
 from scipy.sparse import linalg as slinalg
 from support import crypto, util
 import tenseal as ts
+from typing import List
 
 
 class SecureSVD:
-    def __init__(self, A: ts.CKKSTensor, r: int):
+    def __init__(
+        self, A: List[List[ts.CKKSVector]], r: int
+    ) -> tuple(
+        List[List[ts.CKKSVector]], List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]
+    ):
         # same api as:
         # U, S, vT = slinalg.svds(ratings, self.r)
         # m movies, n users
@@ -15,38 +20,45 @@ class SecureSVD:
 
 
 class SecureMatrixMultiplication:
-    def __init__(self, A, B):
+    def __init__(self, A: List[List[ts.CKKSVector]], B: List[List[ts.CKKSVector]]):
         # there is likely already an implementation in CKKSTensor in tenseal
+        # actually, since we're not using CKKStensors, we might be able to get away with broadcast working for the @ symbol! We should test this out
         pass
 
 
 class SecureClip:
-    def __init__(self, min: float, x: float, max: float):
+    def __init__(self, x: float, min: float, max: float):
         pass
 
 
 class SecureMatrixCompletion:
     def __init__(
         self,
-        ratings,
-        filled_entries_bool,
-        r,
-        epochs,
-        alpha,
-        encrypt_pk: crypto.AsmPublicKey,
+        ratings_mat: List[List[ts.CKKSVector]],
+        is_filled_mat: List[List[ts.CKKSVector]],
+        r: int,
+        epochs: int,
+        alpha: float,
+        public_context: bytes,
     ):
+        self.encrypt_pk = ts.context_from(public_context)
+
         # m movies, n users
-        self.n, self.m = len(ratings[0]), len(ratings)
+        self.n, self.m = len(ratings_mat[0]), len(ratings_mat)
 
         # TODO: all unpopulated ratings have encrypted value 0 (this should be the case before instantiating this class)
-        self.M = ratings
-        self.filled = filled_entries_bool
+        self.ratings_mat = ratings_mat
+        self.is_filled_mat = is_filled_mat
+        self.indices_mat = np.empty(self.M.shape)
+        for r in range(self.n):
+            for c in range(self.m):
+                self.indices_mat[r][c] = (r, c)
 
         # rank / no.of features
         self.r = r
 
         # TODO: we need an SVD that supports FHE
-        U, _, vT = slinalg.svds(ratings, k=r)
+        U, _, vT = slinalg.svds(ratings_mat, k=r)
 
         self.X = U
         self.Y = np.transpose(vT)
@@ -58,24 +70,20 @@ class SecureMatrixCompletion:
         self.epochs = epochs
 
         # lr
-        self.alpha = alpha
+        self.alpha: ts.CKKSVector = ts.ckks_vector(self.encrypt_pk, [alpha])
 
-        val_proportion = 0.1
+        # proportion of entries contributing to validation instead of training
+        self.val_prop = 0.1
 
     def shuffle_data(self):
-        assert self.M.shape == self.filled.shape
+        assert self.ratings_mat.shape == self.is_filled_mat.shape
 
-        M_flat = np.array(self.M).flatten()
-        filled_flat = np.array(self.filled).flatten()
+        ratings_flat = np.array(self.ratings_mat).flatten()
+        filled_flat = np.array(self.is_filled_mat).flatten()
 
-        self.indices_mat = np.empty(self.M.shape)
-        for r in range(self.n):
-            for c in range(self.m):
-                self.indices_mat[r][c] = (r, c)
-
-        perm = np.random.permutation(len(self.M))
-        self.shuffled_rankings = M_flat[perm].reshape(self.M.shape)
-        self.shuffled_filled = filled_flat[perm].reshape(self.filled.shape)
+        perm = np.random.permutation(len(self.ratings_flat))
+        self.shuffled_rankings = ratings_flat[perm].reshape(self.ratings_mat.shape)
+        self.shuffled_filled = filled_flat[perm].reshape(self.is_filled_mat.shape)
         self.shuffled_indices = self.indices_mat.flatten()[perm].reshape(
             self.indices_mat.shape
         )
@@ -90,26 +98,29 @@ class SecureMatrixCompletion:
             print(f"Iteration {cur_i}, Train loss: {err_train}, Val loss: {err_val}")
 
     def sgd(self):
+        two_encrypted = ts.ckks_vector(self.encrypt_pk, [2])
+
         for s_no, (M_i_j, (i, j), is_filled) in enumerate(
             zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
         ):
             # there is no update to M if the value is not filled
-            e_i_j = (M_i_j - self.get_rating(i, j)) * is_filled
+            e_i_j = (M_i_j - self.pred_rating(i, j)) * is_filled
 
             # gradient update rules derived from the loss function relation, derivation in the pdf
             # recall that both self.X and self.Y have the same number of cols
             for c in range(self.r):
-                self.X[i, c] += self.alpha * 2 * e_i_j * self.Y[j, c]
-                self.Y[j, c] += self.alpha * 2 * e_i_j * self.X[i, c]
+                self.X[i, c] += self.alpha * two_encrypted * e_i_j * self.Y[j, c]
+                self.Y[j, c] += self.alpha * two_encrypted * e_i_j * self.X[i, c]
 
             # for debugging purposes to see how far we are into the sgd
             if s_no % 100000 == 0:
                 print(s_no / len(self.indices_train) * 100)
 
-    def get_rating(self, i, j):
+    def pred_rating(self, i, j) -> ts.CKKSVector:
         val = self.X[i, :] @ self.Y[j, :].T
         # 0.5 <= rating <= 5
-        val = max(min(val, 5), 0.5)
+        # val = max(min(val, 5), 0.5)
+        val = SecureClip(val, 0.5, 5)
         return val
 
     def error(self):
