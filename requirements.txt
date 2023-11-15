@@ -4,3 +4,5 @@ dacite==1.8.0
 pycparser==2.21
 pymerkle==4.0.0
 six==1.16.0
+tenseal==0.3.14
+numpy==1.24.4

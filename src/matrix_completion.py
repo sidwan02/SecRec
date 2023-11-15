@@ -1,32 +1,47 @@
 import numpy as np
 from scipy.sparse import linalg as slinalg
-from sklearn.model_selection import train_test_split
-from sklearn.utils import shuffle
 from support import crypto, util
+import tenseal as ts
+
 
 class SecureSVD:
-    def __init__(self, A, r: int):
-        # same api as: 
+    def __init__(self, A: ts.CKKSTensor, r: int):
+        # same api as:
         # U, S, vT = slinalg.svds(ratings, self.r)
+        # m movies, n users
+        # U is n x r
+        # vT is r x m
         pass
+
 
 class SecureMatrixMultiplication:
     def __init__(self, A, B):
+        # there is likely already an implementation in CKKSTensor in tenseal
         pass
+
 
 class SecureClip:
     def __init__(self, min: float, x: float, max: float):
         pass
 
+
 class SecureMatrixCompletion:
-    def __init__(self, ratings, filled_entries_bool, r, epochs, alpha, encrypt_pk: crypto.AsmPublicKey):
+    def __init__(
+        self,
+        ratings,
+        filled_entries_bool,
+        r,
+        epochs,
+        alpha,
+        encrypt_pk: crypto.AsmPublicKey,
+    ):
         # m movies, n users
         self.n, self.m = len(ratings[0]), len(ratings)
 
         # TODO: all unpopulated ratings have encrypted value 0 (this should be the case before instantiating this class)
         self.M = ratings
         self.filled = filled_entries_bool
-        
+
         # rank / no.of features
         self.r = r
 
@@ -46,23 +61,25 @@ class SecureMatrixCompletion:
         self.alpha = alpha
 
         val_proportion = 0.1
-        
+
     def shuffle_data(self):
         assert self.M.shape == self.filled.shape
-        
+
         M_flat = np.array(self.M).flatten()
         filled_flat = np.array(self.filled).flatten()
-        
+
         self.indices_mat = np.empty(self.M.shape)
         for r in range(self.n):
             for c in range(self.m):
                 self.indices_mat[r][c] = (r, c)
-        
+
         perm = np.random.permutation(len(self.M))
         self.shuffled_rankings = M_flat[perm].reshape(self.M.shape)
         self.shuffled_filled = filled_flat[perm].reshape(self.filled.shape)
-        self.shuffled_indices = self.indices_mat.flatten()[perm].reshape(self.indices_mat.shape)
-        
+        self.shuffled_indices = self.indices_mat.flatten()[perm].reshape(
+            self.indices_mat.shape
+        )
+
     def train(self):
         for cur_i in range(1, self.epochs + 1):
             # shuffle the train data
@@ -125,11 +142,9 @@ class SecureMatrixCompletion:
         for i, j in self.queries:
             f.write(f"{M_prime[i, j]}\n")
         f.close()
-        
-        
+
     # when the user writes they write the whole row, then everyone uses PIR to access it
-    # singular key is ok. But see if there's 
-    
+    # singular key is ok. But see if there's
 
 
 mf = MatrixFactorization(file_path="./mat_comp", r=30, epochs=10, alpha=1e-3)
@@ -138,4 +153,3 @@ mf.train()
 print(mf.M)
 print(mf.compute_M_prime())
 mf.generate_output()
-
