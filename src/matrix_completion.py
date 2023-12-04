@@ -5,14 +5,12 @@ import tenseal as ts
 from typing import List
 
 
-def decrypt_mat(
-    A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
-) -> List[List[float]]:
+def decrypt_mat(A: List[List[bytes]], decrypt_sk: ts.Context) -> List[List[float]]:
     plaintext_mat = np.empty((2, 4), dtype=float)
 
-    for i in range(len(self.matrix)):
-        for j in range(len(self.matrix[0])):
-            m = self.matrix[i][j]
+    for i in range(len(A)):
+        for j in range(len(A[0])):
+            m = ts.lazy_ckks_vector_from(A[i][j])
             m.link_context(decrypt_sk)
             plaintext_mat[i][j] = round(m.decrypt()[0], 4)
 
@@ -21,33 +19,43 @@ def decrypt_mat(
     return plaintext_mat
 
 
-def encrypt_mat(
-    A: List[List[float]], encrypt_pk: ts.Context
-) -> List[List[ts.CKKSVector]]:
+def encrypt_mat(A: List[List[float]], encrypt_pk: ts.Context) -> List[List[bytes]]:
     cipher_matrix = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
 
     for i in range(len(A)):
         for j in range(len(A[0])):
-            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]])
+            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]]).serialize()
 
     cipher_matrix = np.array(cipher_matrix)
 
     return cipher_matrix
 
 
-# TODO: make some tests for encrypt_mat and decrypt_mat and secure clip
+# TODO: make some tests for encrypt_mat and decrypt_mat and secure clip and secure clear division
+
+
+class SecureClearDivision:
+    def __init__(self, secret_context: bytes):
+        self.decrypt_sk = ts.context_from(secret_context)
+
+    def compute_division(self, x: ts.CKKSVector, y: ts.CKKSVector) -> float:
+        x.link_context(self.decrypt_sk)
+        y.link_context(self.decrypt_sk)
+
+        x_plain = round(x.decrypt()[0], 4)
+        y_plain = round(y.decrypt()[0], 4)
+
+        ans = x_plain / y_plain
+
+        return ans
 
 
 class SecureSVD:
-    def __init__(
-        self, secret_context: bytes
-    ) -> tuple(
-        List[List[ts.CKKSVector]], List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]
-    ):
+    def __init__(self, secret_context: bytes):
         self.decrypt_sk = ts.context_from(secret_context)
 
     def compute_SVD(
-        self, A: List[List[ts.CKKSVector]], r: int
+        self, A: List[List[bytes]], r: int
     ) -> tuple(List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]):
         # same api as:
         # U, S, vT = slinalg.svds(ratings, self.r)
@@ -82,38 +90,18 @@ class SecureClip:
 class SecureMatrixCompletion:
     def __init__(
         self,
-        ratings_mat: List[List[ts.CKKSVector]],
-        is_filled_mat: List[List[ts.CKKSVector]],
         r: int,
         epochs: int,
         alpha: float,
         public_context: bytes,
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
+        secure_division_wrapper: SecureClearDivision,
     ):
         self.encrypt_pk = ts.context_from(public_context)
 
-        # m movies, n users
-        self.n, self.m = len(ratings_mat[0]), len(ratings_mat)
-
-        # TODO: all unpopulated ratings have encrypted value 0 (this should be the case before instantiating this class)
-        self.ratings_mat = ratings_mat
-        self.is_filled_mat = is_filled_mat
-        self.indices_mat = np.empty(self.M.shape)
-        for r in range(self.n):
-            for c in range(self.m):
-                self.indices_mat[r][c] = (r, c)
-
         # rank / no.of features
         self.r = r
-
-        U, _, vT = secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
-
-        self.X = U
-        self.Y = np.transpose(vT)
-
-        assert self.X.shape == (self.n, self.r)
-        assert self.Y.shape == (self.m, self.r)
 
         # iterations of SGD
         self.epochs = epochs
@@ -125,6 +113,36 @@ class SecureMatrixCompletion:
         self.val_prop = 0.1
 
         self.secure_clip_wrapper = secure_clip_wrapper
+        self.secure_svd_wrapper = secure_svd_wrapper
+        self.secure_division_wrapper = secure_division_wrapper
+
+    def prepare_data(
+        self,
+        ratings_mat: List[List[bytes]],
+        is_filled_mat: List[List[bytes]],
+    ):
+        # m movies, n users
+        self.n, self.m = len(ratings_mat[0]), len(ratings_mat)
+
+        self.num_train_values: ts.CKKSVector = ts.ckks_vector(self.encrypt_pk, [0])
+
+        self.ratings_mat = ratings_mat
+        self.is_filled_mat = is_filled_mat
+        self.indices_mat = np.empty(self.M.shape)
+        for r in range(self.n):
+            for c in range(self.m):
+                self.indices_mat[r][c] = (r, c)
+
+                # TODO: maybe this being lazy is a problem
+                self.num_train_values += ts.lazy_ckks_vector_from(is_filled_mat[r][c])
+
+        U, _, vT = self.secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
+
+        self.X = U
+        self.Y = np.transpose(vT)
+
+        assert self.X.shape == (self.n, self.r)
+        assert self.Y.shape == (self.m, self.r)
 
     def shuffle_data(self):
         assert self.ratings_mat.shape == self.is_filled_mat.shape
@@ -165,7 +183,7 @@ class SecureMatrixCompletion:
 
             # for debugging purposes to see how far we are into the sgd
             if s_no % 100000 == 0:
-                print(s_no / len(self.indices_train) * 100)
+                print(f"Computing: {s_no / (self.n * self.m) * 100} %")
 
     def pred_rating(self, i, j) -> ts.CKKSVector:
         val = self.X[i, :] @ self.Y[j, :].T
@@ -179,16 +197,28 @@ class SecureMatrixCompletion:
         M_prime = self.compute_M_prime()
 
         # Computing the MSE loss
-        for (i, j), M_i_j in zip(self.indices_train, self.ratings_train):
-            error_train += (M_i_j - M_prime[i, j]) ** 2
+        for s_no, (M_i_j, (i, j), is_filled) in enumerate(
+            zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
+        ):
+            # TODO: later on, split train set into train and val.
+            error_train += (M_i_j - M_prime[i, j]) * (M_i_j - M_prime[i, j]) * is_filled
 
-        for (i, j), M_i_j in zip(self.indices_val, self.ratings_val):
-            error_val += (M_i_j - M_prime[i, j]) ** 2
+        # for (i, j), M_i_j in zip(self.indices_train, self.ratings_train):
+        #     error_train += (M_i_j - M_prime[i, j]) ** 2
+
+        # for (i, j), M_i_j in zip(self.indices_val, self.ratings_val):
+        #     error_val += (M_i_j - M_prime[i, j]) ** 2
 
         # normalizing by the number of seen entries
+        # return (
+        #     error_train / (len(self.indices_train)),
+        #     error_val / (len(self.indices_val)),
+        # )
         return (
-            error_train / (len(self.indices_train)),
-            error_val / (len(self.indices_val)),
+            self.secure_division_wrapper.compute_division(
+                error_train, self.num_train_values
+            ),
+            0,
         )
 
     def compute_M_prime(self):
@@ -196,21 +226,21 @@ class SecureMatrixCompletion:
         M_prime = np.clip(M_prime, 0.5, 5)
         return M_prime
 
-    def generate_output(self):
-        M_prime = self.compute_M_prime()
+    # def generate_output(self):
+    #     M_prime = self.compute_M_prime()
 
-        f = open("mat_comp_ans", "w")
-        for i, j in self.queries:
-            f.write(f"{M_prime[i, j]}\n")
-        f.close()
+    #     f = open("mat_comp_ans", "w")
+    #     for i, j in self.queries:
+    #         f.write(f"{M_prime[i, j]}\n")
+    #     f.close()
 
     # when the user writes they write the whole row, then everyone uses PIR to access it
     # singular key is ok. But see if there's
 
 
-mf = MatrixFactorization(file_path="./mat_comp", r=30, epochs=10, alpha=1e-3)
-print("starting train")
-mf.train()
-print(mf.M)
-print(mf.compute_M_prime())
-mf.generate_output()
+# mf = MatrixFactorization(file_path="./mat_comp", r=30, epochs=10, alpha=1e-3)
+# print("starting train")
+# mf.train()
+# print(mf.M)
+# print(mf.compute_M_prime())
+# mf.generate_output()

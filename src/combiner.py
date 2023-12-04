@@ -97,5 +97,12 @@ class Combiner:
             rating, user_ownership_map[user], movie_ownership_map[movie]
         )
 
-    def receive_rating(self, movie: str, username: str) -> Union[None, float]:
-        pass
+    def receive_rating(self, movie: str, username: str) -> bytes:
+        movie_ownership_map = self.retrieve_server_storage("movie-ownership")
+        user_ownership_map = self.retrieve_server_storage("user-ownership")
+
+        rating_bytes: bytes = Server.receive_rating(
+            user_ownership_map[user], movie_ownership_map[movie]
+        )
+
+        return rating_bytes

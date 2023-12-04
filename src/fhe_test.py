@@ -17,7 +17,7 @@ secret_key = ts.context_from(secret_context)
 
 # these can be lists
 a_encrypted = ts.ckks_vector(public_key, np.array([1, 2, 3, 4]))
-    
+
 b_encrypted = ts.ckks_vector(public_key, np.array([1, 2, 3, 4]))
 
 ans_encrypted = a_encrypted * b_encrypted
