@@ -1,6 +1,5 @@
 from server import Server
 import support.crypto as crypto
-from user import User
 from typing import List, Union
 from support import util
 import tenseal as ts
@@ -35,9 +34,12 @@ class Combiner:
         data_sign = crypto.SignatureSign(data_signk, plaintext)
 
         # concat the sign to the plaintext, then encrypt
-        ciphertext = crypto.AsymmetricEncrypt(data_encryptk, data + data_sign)
+        # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
+        ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext)
 
+        # TODO: see later on if there is a way to concat the sign to the plaintext and not need to store the sign separately
         self.server.storage[description] = ciphertext
+        self.server.storage[f"{description}-sign"] = data_sign
 
         self.keyDB.keys[f"{description}-encryptk"] = data_encryptk
         self.keyDB.keys[f"{description}-decryptk"] = data_decryptk
@@ -54,21 +56,26 @@ class Combiner:
 
         # concat the sign to the plaintext, then encrypt
         ciphertext = crypto.AsymmetricEncrypt(
-            self.keyDB.keys[f"{description}-encryptk"], data + data_sign
+            self.keyDB.keys[f"{description}-encryptk"], plaintext
         )
 
         self.server.storage[description] = ciphertext
+        self.server.storage[f"{description}-sign"] = data_sign
 
     def retrieve_server_storage(self, description: str):
-        concat_plaintext = crypto.AsymmetricDecrypt(
+        plaintext = crypto.AsymmetricDecrypt(
             self.keyDB.keys[f"{description}-decryptk"], self.server.storage[description]
         )
-        plaintext, signature = concat_plaintext[:-512], concat_plaintext[-512:]
+
+        # TODO: get the signature separately.
+        signature = self.server.storage[f"{description}-sign"]
+        # plaintext, signature = concat_plaintext[:-512], concat_plaintext[-512:]
 
         if not crypto.SignatureVerify(
             self.keyDB.keys[f"{description}-verifyk"], plaintext, signature
         ):
-            pass
+            print("Plaintext has been corrupted!")
+            return None
 
         return util.BytesToObject(plaintext)
 
@@ -106,3 +113,12 @@ class Combiner:
         )
 
         return rating_bytes
+
+    def test_server_storage(self):
+        a = {"hi": 1}
+        self.setup_server_storage(a, "test 1")
+        assert a == self.retrieve_server_storage("test 1")
+
+        b = {"bye": 100}
+        self.server_store(b, "test 1")
+        assert b == self.retrieve_server_storage("test 1")

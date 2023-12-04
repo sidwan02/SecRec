@@ -1,4 +1,4 @@
-from matrix_completion import SecureMatrixCompletion
+from matrix_completion import *
 
 
 class Server:
@@ -7,6 +7,7 @@ class Server:
         public_context: bytes,
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
+        secure_division_wrapper: SecureClearDivision,
     ):
         self.storage = {}
 
@@ -23,7 +24,13 @@ class Server:
         self.is_filled = [[]]
 
         self.secure_matrix_completion_wrapper = SecureMatrixCompletion(
-            10, 50, 1e-1, public_context, secure_svd_wrapper, secure_clip_wrapper
+            10,
+            50,
+            1e-1,
+            public_context,
+            secure_svd_wrapper,
+            secure_clip_wrapper,
+            secure_division_wrapper,
         )
 
     # adds a new col

@@ -1,6 +1,7 @@
 from combiner import Combiner
 from user import User
 from server import Server
+from matrix_completion import SecureSVD, SecureClip, SecureClearDivision
 import support.crypto as crypto
 import tenseal as ts
 import base64
@@ -23,7 +24,16 @@ if __name__ == "__main__":
     context.make_context_public()
     public_context = context.serialize()
 
-    server = Server(public_context)
+    server = Server(
+        public_context,
+        SecureSVD(public_context, secret_context),
+        SecureClip(public_context, secret_context),
+        SecureClearDivision(secret_context),
+    )
     combiner = Combiner(server, public_context)
 
     user1 = User("Bob", combiner, public_context, secret_context)
+
+    ######### TESTS START #########
+    combiner.test_server_storage()
+    ######### TESTS END #########

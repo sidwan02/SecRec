@@ -13,9 +13,6 @@ import code
 import json
 import base64
 
-import readline
-import rlcompleter
-
 
 def _print_bytes(b: bytes) -> None:
     """
@@ -158,12 +155,3 @@ def BytesToObject(b: bytes) -> object:
 class DropboxError(Exception):
     def __init__(self, msg="DROPBOX ERROR", *args, **kwargs):
         super().__init__(msg, *args, **kwargs)
-
-
-def start_repl(extra_vars=None):
-    vars = globals()
-    if extra_vars:
-        vars.update(extra_vars)
-    readline.set_completer(rlcompleter.Completer(vars).complete)
-    readline.parse_and_bind("tab: complete")
-    code.InteractiveConsole(vars).interact()

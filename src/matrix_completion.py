@@ -2,15 +2,26 @@ import numpy as np
 from scipy.sparse import linalg as slinalg
 from support import crypto, util
 import tenseal as ts
-from typing import List
+from typing import List, Tuple
 
 
-def decrypt_mat(A: List[List[bytes]], decrypt_sk: ts.Context) -> List[List[float]]:
-    plaintext_mat = np.empty((2, 4), dtype=float)
+def convert_bytes_mat_to_ckks_mat(
+    A: List[List[bytes]],
+) -> List[List[ts.CKKSVector]]:
+    return [
+        [ts.lazy_ckks_vector_from(A[i][j]) for j in range(len(A[0]))]
+        for i in range(len(A))
+    ]
+
+
+def decrypt_ckks_mat(
+    A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
+) -> List[List[float]]:
+    plaintext_mat = np.empty((len(A[0]), len(A)), dtype=float)
 
     for i in range(len(A)):
         for j in range(len(A[0])):
-            m = ts.lazy_ckks_vector_from(A[i][j])
+            m = A[i][j]
             m.link_context(decrypt_sk)
             plaintext_mat[i][j] = round(m.decrypt()[0], 4)
 
@@ -19,19 +30,21 @@ def decrypt_mat(A: List[List[bytes]], decrypt_sk: ts.Context) -> List[List[float
     return plaintext_mat
 
 
-def encrypt_mat(A: List[List[float]], encrypt_pk: ts.Context) -> List[List[bytes]]:
+def encrypt_to_ckks_mat(
+    A: List[List[float]], encrypt_pk: ts.Context
+) -> List[List[ts.CKKSVector]]:
     cipher_matrix = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
 
     for i in range(len(A)):
         for j in range(len(A[0])):
-            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]]).serialize()
+            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]])
 
     cipher_matrix = np.array(cipher_matrix)
 
     return cipher_matrix
 
 
-# TODO: make some tests for encrypt_mat and decrypt_mat and secure clip and secure clear division
+# TODO: make some tests for encrypt_to_ckks_mat and decrypt_ckks_mat and secure clip and secure clear division
 
 
 class SecureClearDivision:
@@ -51,12 +64,13 @@ class SecureClearDivision:
 
 
 class SecureSVD:
-    def __init__(self, secret_context: bytes):
+    def __init__(self, public_context: bytes, secret_context: bytes):
+        self.encrypt_pk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
 
     def compute_SVD(
         self, A: List[List[bytes]], r: int
-    ) -> tuple(List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]):
+    ) -> Tuple[List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]]:
         # same api as:
         # U, S, vT = slinalg.svds(ratings, self.r)
         # m movies, n users
@@ -65,13 +79,17 @@ class SecureSVD:
 
         # TODO: we will replace this with a secure SVD implementation later.
 
-        ratings_mat = decrypt_mat(A, self.decrypt_sk)
+        ratings_mat = decrypt_ckks_mat(A, self.decrypt_sk)
 
-        return slinalg.svds(ratings_mat, k=r)
+        U, _, vT = slinalg.svds(ratings_mat, k=r)
+
+        return encrypt_to_ckks_mat(U, self.encrypt_pk), encrypt_to_ckks_mat(
+            vT, self.encrypt_pk
+        )
 
 
 class SecureClip:
-    def __init__(self, self, secret_context: bytes, public_context: bytes):
+    def __init__(self, public_context: bytes, secret_context: bytes):
         # Look into https://medium.com/optalysys/max-min-and-sort-functions-using-programmable-bootstrapping-in-concrete-fhe-ac4d9378f17d
 
         self.encrypt_sk = ts.context_from(public_context)
@@ -126,15 +144,15 @@ class SecureMatrixCompletion:
 
         self.num_train_values: ts.CKKSVector = ts.ckks_vector(self.encrypt_pk, [0])
 
-        self.ratings_mat = ratings_mat
-        self.is_filled_mat = is_filled_mat
+        self.ratings_mat = convert_bytes_mat_to_ckks_mat(ratings_mat)
+        self.is_filled_mat = convert_bytes_mat_to_ckks_mat(is_filled_mat)
         self.indices_mat = np.empty(self.M.shape)
         for r in range(self.n):
             for c in range(self.m):
                 self.indices_mat[r][c] = (r, c)
 
                 # TODO: maybe this being lazy is a problem
-                self.num_train_values += ts.lazy_ckks_vector_from(is_filled_mat[r][c])
+                self.num_train_values += is_filled_mat[r][c]
 
         U, _, vT = self.secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
 
