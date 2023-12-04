@@ -5,30 +5,78 @@ import tenseal as ts
 from typing import List
 
 
+def decrypt_mat(
+    A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
+) -> List[List[float]]:
+    plaintext_mat = np.empty((2, 4), dtype=float)
+
+    for i in range(len(self.matrix)):
+        for j in range(len(self.matrix[0])):
+            m = self.matrix[i][j]
+            m.link_context(decrypt_sk)
+            plaintext_mat[i][j] = round(m.decrypt()[0], 4)
+
+    print(plaintext_matrix)
+
+    return plaintext_mat
+
+
+def encrypt_mat(
+    A: List[List[float]], encrypt_pk: ts.Context
+) -> List[List[ts.CKKSVector]]:
+    cipher_matrix = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
+
+    for i in range(len(A)):
+        for j in range(len(A[0])):
+            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]])
+
+    cipher_matrix = np.array(cipher_matrix)
+
+    return cipher_matrix
+
+
+# TODO: make some tests for encrypt_mat and decrypt_mat and secure clip
+
+
 class SecureSVD:
     def __init__(
-        self, A: List[List[ts.CKKSVector]], r: int
+        self, secret_context: bytes
     ) -> tuple(
         List[List[ts.CKKSVector]], List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]
     ):
+        self.decrypt_sk = ts.context_from(secret_context)
+
+    def compute_SVD(
+        self, A: List[List[ts.CKKSVector]], r: int
+    ) -> tuple(List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]):
         # same api as:
         # U, S, vT = slinalg.svds(ratings, self.r)
         # m movies, n users
         # U is n x r
         # vT is r x m
-        pass
 
+        # TODO: we will replace this with a secure SVD implementation later.
 
-class SecureMatrixMultiplication:
-    def __init__(self, A: List[List[ts.CKKSVector]], B: List[List[ts.CKKSVector]]):
-        # there is likely already an implementation in CKKSTensor in tenseal
-        # actually, since we're not using CKKStensors, we might be able to get away with broadcast working for the @ symbol! We should test this out
-        pass
+        ratings_mat = decrypt_mat(A, self.decrypt_sk)
+
+        return slinalg.svds(ratings_mat, k=r)
 
 
 class SecureClip:
-    def __init__(self, x: float, min: float, max: float):
-        pass
+    def __init__(self, self, secret_context: bytes, public_context: bytes):
+        # Look into https://medium.com/optalysys/max-min-and-sort-functions-using-programmable-bootstrapping-in-concrete-fhe-ac4d9378f17d
+
+        self.encrypt_sk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+
+    def clip(self, x: ts.CKKSVector, min_val: float, max_val: float) -> ts.CKKSVector:
+        x.link_context(self.decrypt_sk)
+
+        x_plain = round(m.decrypt()[0], 4)
+
+        ans = max(min(x_plain, max_val), min_val)
+
+        return ts.ckks_vector(self.encrypt_sk, [ans])
 
 
 class SecureMatrixCompletion:
@@ -40,6 +88,8 @@ class SecureMatrixCompletion:
         epochs: int,
         alpha: float,
         public_context: bytes,
+        secure_svd_wrapper: SecureSVD,
+        secure_clip_wrapper: SecureClip,
     ):
         self.encrypt_pk = ts.context_from(public_context)
 
@@ -57,8 +107,7 @@ class SecureMatrixCompletion:
         # rank / no.of features
         self.r = r
 
-        # TODO: we need an SVD that supports FHE
-        U, _, vT = slinalg.svds(ratings_mat, k=r)
+        U, _, vT = secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
 
         self.X = U
         self.Y = np.transpose(vT)
@@ -74,6 +123,8 @@ class SecureMatrixCompletion:
 
         # proportion of entries contributing to validation instead of training
         self.val_prop = 0.1
+
+        self.secure_clip_wrapper = secure_clip_wrapper
 
     def shuffle_data(self):
         assert self.ratings_mat.shape == self.is_filled_mat.shape
@@ -119,8 +170,7 @@ class SecureMatrixCompletion:
     def pred_rating(self, i, j) -> ts.CKKSVector:
         val = self.X[i, :] @ self.Y[j, :].T
         # 0.5 <= rating <= 5
-        # val = max(min(val, 5), 0.5)
-        val = SecureClip(val, 0.5, 5)
+        val = self.secure_clip_wrapper(val, 0.5, 5)
         return val
 
     def error(self):
