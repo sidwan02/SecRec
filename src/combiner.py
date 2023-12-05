@@ -130,17 +130,21 @@ class Combiner:
         self.server_store(b, "test 1")
         assert b == self.retrieve_server_storage("test 1")
 
-    def test_print_clear_server_storage(self, decrypt_sk: ts.Context):
+    def test_print_clear_server_storage(
+        self, encrypt_pk: ts.Context, decrypt_sk: ts.Context
+    ):
         decrypted_ratings = np.array(
             util.decrypt_ckks_mat(
-                util.convert_bytes_mat_to_ckks_mat(self.server.ratings), decrypt_sk
+                util.convert_bytes_mat_to_ckks_mat(self.server.ratings, encrypt_pk),
+                decrypt_sk,
             )
         )
 
         decrypted_is_filled = np.array(
             util.decrypt_ckks_mat(
-                util.convert_bytes_mat_to_ckks_mat(self.server.is_filled), decrypt_sk
-            )
+                util.convert_bytes_mat_to_ckks_mat(self.server.is_filled, encrypt_pk),
+                decrypt_sk,
+            ),
         )
 
         movie_ownership_map = self.retrieve_server_storage("movie-ownership")

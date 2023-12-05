@@ -110,17 +110,23 @@ class SecureMatrixCompletion:
 
         self.num_train_values: ts.CKKSVector = ts.ckks_vector(self.encrypt_pk, [0])
 
-        self.ratings_mat = convert_bytes_mat_to_ckks_mat(ratings_mat)
-        self.is_filled_mat = convert_bytes_mat_to_ckks_mat(is_filled_mat)
-        self.indices_mat = np.empty(self.ratings_mat.shape)
+        self.ratings_mat = np.array(
+            convert_bytes_mat_to_ckks_mat(ratings_mat, self.encrypt_pk)
+        )
+        self.is_filled_mat = np.array(
+            convert_bytes_mat_to_ckks_mat(is_filled_mat, self.encrypt_pk)
+        )
+        self.indices_mat = np.empty(self.ratings_mat.shape, dtype=object)
         for r in range(self.n):
             for c in range(self.m):
                 self.indices_mat[r][c] = (r, c)
 
                 # TODO: maybe this being lazy is a problem
-                self.num_train_values += is_filled_mat[r][c]
+                self.num_train_values += self.is_filled_mat[r][c]
 
-        U, _, vT = self.secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
+        # print(self.indices_mat)
+
+        U, vT = self.secure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
 
         self.X = U
         self.Y = np.transpose(vT)
@@ -133,13 +139,13 @@ class SecureMatrixCompletion:
 
         ratings_flat = np.array(self.ratings_mat).flatten()
         filled_flat = np.array(self.is_filled_mat).flatten()
+        indices_flat = self.indices_mat.flatten()
 
-        perm = np.random.permutation(len(self.ratings_flat))
-        self.shuffled_rankings = ratings_flat[perm].reshape(self.ratings_mat.shape)
-        self.shuffled_filled = filled_flat[perm].reshape(self.is_filled_mat.shape)
-        self.shuffled_indices = self.indices_mat.flatten()[perm].reshape(
-            self.indices_mat.shape
-        )
+        perm = np.random.permutation(len(ratings_flat))
+
+        self.shuffled_rankings = ratings_flat[perm]
+        self.shuffled_filled = filled_flat[perm]
+        self.shuffled_indices = indices_flat[perm]
 
     def train(self):
         for cur_i in range(1, self.epochs + 1):

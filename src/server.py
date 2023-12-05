@@ -34,7 +34,8 @@ class Server:
         self.zero_bytes = ts.ckks_vector(self.encrypt_pk, [0]).serialize()
 
         self.secure_matrix_completion_wrapper = SecureMatrixCompletion(
-            10,
+            # 10,
+            2,
             50,
             1e-1,
             public_context,
@@ -104,5 +105,5 @@ class Server:
 
     def receive_rating(self, r: int, c: int) -> bytes:
         # TODO: optimization is that if the rating already exists then there isn't a need to recompute the matrix completion. This could be in the form of a flag sent by the combiner.
-        # self.matrix_completion()
+        self.matrix_completion()
         return self.ratings[r][c]

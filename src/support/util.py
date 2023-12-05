@@ -162,12 +162,21 @@ class DropboxError(Exception):
 
 ############# Tenseal Util #############
 def convert_bytes_mat_to_ckks_mat(
-    A: List[List[bytes]],
+    A: List[List[bytes]], encrypt_pk: ts.Context
 ) -> List[List[ts.CKKSVector]]:
-    return [
-        [ts.lazy_ckks_vector_from(A[i][j]) for j in range(len(A[0]))]
-        for i in range(len(A))
-    ]
+    # return [
+    #     [ts.lazy_ckks_vector_from(A[i][j]) for j in range(len(A[0]))]
+    #     for i in range(len(A))
+    # ]
+    matrix_ckks = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
+
+    for i in range(len(A)):
+        for j in range(len(A[0])):
+            m = ts.lazy_ckks_vector_from(A[i][j])
+            m.link_context(encrypt_pk)
+            matrix_ckks[i][j] = m
+
+    return matrix_ckks
 
 
 def decrypt_ckks_mat(
