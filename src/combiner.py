@@ -7,8 +7,6 @@ import numpy as np
 import pandas as pd
 from tabulate import tabulate
 
-# The combiner does not have the ability to store information (if it did, then the problem becomes to easy). It must store all information with the server.
-
 
 class KeyDB:
     def __init__(self):
@@ -27,10 +25,36 @@ class Combiner:
         # {movie: col_id}
         self.setup_server_storage({}, "movie-ownership")
 
+    # data key is a symmetric key
+    def setup_key_storage(self, data_key, description):
+        key_verifyk, key_signk = crypto.SignatureKeyGen()
+
+        # sign the plaintext
+        key_sign = crypto.SignatureSign(key_signk, data_key)
+
+        key_encryptk, key_decryptk = crypto.AsymmetricKeyGen()
+
+        # concat the sign to the plaintext, then encrypt
+        # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
+
+        ciphertext_key = crypto.AsymmetricEncrypt(key_encryptk, data_key)
+
+        self.server.storage[f"{description}"] = ciphertext_key
+        self.server.storage[f"{description}-sign"] = key_sign
+
+        self.keyDB.keys[f"{description}-encryptk"] = key_encryptk
+        self.keyDB.keys[f"{description}-decryptk"] = key_decryptk
+
+        self.keyDB.keys[f"{description}-signk"] = key_signk
+        self.keyDB.keys[f"{description}-verifyk"] = key_verifyk
+
     def setup_server_storage(self, data, description):
         plaintext = util.ObjectToBytes(data)
 
-        data_encryptk, data_decryptk = crypto.AsymmetricKeyGen()
+        data_key = crypto.PasswordKDF(
+            description, crypto.ZERO_SALT, 128 // crypto.BITS_IN_BYTE
+        )
+
         data_verifyk, data_signk = crypto.SignatureKeyGen()
 
         # sign the plaintext
@@ -38,15 +62,18 @@ class Combiner:
 
         # concat the sign to the plaintext, then encrypt
         # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
-        ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext)
+
+        # TODO: could have an iv as well
+        # data_iv: bytes = crypto.SecureRandom(128 // BITS_IN_BYTE)
+        ciphertext = crypto.SymmetricEncrypt(data_key, crypto.ZERO_SALT, plaintext)
 
         # TODO: see later on if there is a way to concat the sign to the plaintext and not need to store the sign separately
         self.server.storage[description] = ciphertext
         self.server.storage[f"{description}-sign"] = data_sign
 
-        self.keyDB.keys[f"{description}-encryptk"] = data_encryptk
-        self.keyDB.keys[f"{description}-decryptk"] = data_decryptk
+        self.setup_key_storage(data_key, f"{description}-key")
 
+        # TODO: at some point verify what asymmetric keys can be stored on the keyDB and what can't be.
         self.keyDB.keys[f"{description}-signk"] = data_signk
         self.keyDB.keys[f"{description}-verifyk"] = data_verifyk
 
@@ -60,20 +87,36 @@ class Combiner:
             self.keyDB.keys[f"{description}-signk"], plaintext
         )
 
+        data_key = self.retrieve_server_storage_key(f"{description}-key")
         # print(self.keyDB.keys[f"{description}-encryptk"])
 
         # concat the sign to the plaintext, then encrypt
-        ciphertext = crypto.AsymmetricEncrypt(
-            self.keyDB.keys[f"{description}-encryptk"], plaintext
-        )
+        ciphertext = crypto.SymmetricEncrypt(data_key, crypto.ZERO_SALT, plaintext)
 
         self.server.storage[description] = ciphertext
         self.server.storage[f"{description}-sign"] = data_sign
 
-    def retrieve_server_storage(self, description: str):
+    def retrieve_server_storage_key(self, description: str) -> bytes:
         plaintext = crypto.AsymmetricDecrypt(
             self.keyDB.keys[f"{description}-decryptk"], self.server.storage[description]
         )
+
+        # TODO: get the signature separately.
+        signature = self.server.storage[f"{description}-sign"]
+        # plaintext, signature = concat_plaintext[:-512], concat_plaintext[-512:]
+
+        if not crypto.SignatureVerify(
+            self.keyDB.keys[f"{description}-verifyk"], plaintext, signature
+        ):
+            print("Key has been corrupted!")
+            return None
+
+        return plaintext
+
+    def retrieve_server_storage(self, description: str):
+        data_key = self.retrieve_server_storage_key(f"{description}-key")
+
+        plaintext = crypto.SymmetricDecrypt(data_key, self.server.storage[description])
 
         # TODO: get the signature separately.
         signature = self.server.storage[f"{description}-sign"]

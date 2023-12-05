@@ -44,8 +44,8 @@ def demo(server, combiner, public_context, secret_context):
     encrypt_pk = ts.context_from(public_context)
     decrypt_sk = ts.context_from(secret_context)
 
-    num_users = 6
-    num_movies = 5
+    num_users = 10
+    num_movies = 10
 
     users = []
     for i in range(1, num_users + 1):
