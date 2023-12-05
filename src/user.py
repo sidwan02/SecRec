@@ -18,14 +18,20 @@ class User:
         self.decrypt_sk = ts.context_from(secret_context)
 
         # For tast 3, we will not have the global pk and private sk created before User creation. Instead, we will publish the created SEAL keys to the combiner which will then get the global pk, and then that will be set for all users
-        # Combiner.publish_sk()
+        # self.combiner.publish_sk()
 
     def send_rating(self, movie: str, rating: float):
         encrypted_rating = ts.ckks_vector(self.encrypt_pk, [rating])
-        Combiner.handle_rating(movie, encrypted_rating.serialize(), self.username)
+        self.combiner.handle_rating(movie, encrypted_rating.serialize(), self.username)
 
     def receive_rating(self, movie: str) -> float:
-        rating_bytes: bytes = Combiner.receive_rating(movie, self.username)
+        rating_bytes: Union[bytes, None] = self.combiner.receive_rating(
+            movie, self.username
+        )
+
+        if rating_bytes is None:
+            return 0.0
+
         m = ts.lazy_ckks_vector_from(rating_bytes)
         m.link_context(self.decrypt_sk)
 

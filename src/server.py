@@ -104,5 +104,5 @@ class Server:
 
     def receive_rating(self, r: int, c: int) -> bytes:
         # TODO: optimization is that if the rating already exists then there isn't a need to recompute the matrix completion. This could be in the form of a flag sent by the combiner.
-        self.matrix_completion()
+        # self.matrix_completion()
         return self.ratings[r][c]

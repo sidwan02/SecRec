@@ -6,6 +6,7 @@ import support.crypto as crypto
 import tenseal as ts
 import base64
 from support.util import tenseal_util_test
+import math
 
 
 def setup_contexts():
@@ -25,13 +26,19 @@ def setup_contexts():
     return public_context, secret_context
 
 
-def test_handle_rating(server, combiner, public_context, secret_context):
+def test_combiner_rating_logic(server, combiner, public_context, secret_context):
     # TODO: modularize this into a helper function called in multiple tests + other places
     encrypt_pk = ts.context_from(public_context)
     decrypt_sk = ts.context_from(secret_context)
 
+    # Tests for handle_rating
+    user1 = User("Bob", combiner, public_context, secret_context)
+    user2 = User("Alice", combiner, public_context, secret_context)
+    user3 = User("Jason", combiner, public_context, secret_context)
+
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
     # TODO: make all util helpers used by util.f rather than f in all files (make it consistent)
+    # TODO: this function should be in the server not the combiner
     combiner.test_print_clear_server_storage(decrypt_sk)
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [3]).serialize(), "Bob")
     combiner.test_print_clear_server_storage(decrypt_sk)
@@ -49,6 +56,9 @@ def test_handle_rating(server, combiner, public_context, secret_context):
         "movie1", ts.ckks_vector(encrypt_pk, [4.3]).serialize(), "Alice"
     )
     combiner.test_print_clear_server_storage(decrypt_sk)
+
+    # Tests for recieve_rating
+    assert math.isclose(user1.receive_rating("movie1"), 3.0)
 
 
 if __name__ == "__main__":
@@ -71,5 +81,5 @@ if __name__ == "__main__":
     ######### TESTS START #########
     # combiner.test_server_storage()
     # tenseal_util_test()
-    test_handle_rating(server, combiner, public_context, secret_context)
+    test_combiner_rating_logic(server, combiner, public_context, secret_context)
     ######### TESTS END #########

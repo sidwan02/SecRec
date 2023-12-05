@@ -112,7 +112,7 @@ class SecureMatrixCompletion:
 
         self.ratings_mat = convert_bytes_mat_to_ckks_mat(ratings_mat)
         self.is_filled_mat = convert_bytes_mat_to_ckks_mat(is_filled_mat)
-        self.indices_mat = np.empty(self.M.shape)
+        self.indices_mat = np.empty(self.ratings_mat.shape)
         for r in range(self.n):
             for c in range(self.m):
                 self.indices_mat[r][c] = (r, c)

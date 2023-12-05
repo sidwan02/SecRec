@@ -107,11 +107,15 @@ class Combiner:
             rating, user_ownership_map[user], movie_ownership_map[movie]
         )
 
-    def receive_rating(self, movie: str, username: str) -> bytes:
+    def receive_rating(self, movie: str, user: str) -> Union[None, bytes]:
         movie_ownership_map = self.retrieve_server_storage("movie-ownership")
         user_ownership_map = self.retrieve_server_storage("user-ownership")
 
-        rating_bytes: bytes = Server.receive_rating(
+        if movie not in movie_ownership_map or user not in user_ownership_map:
+            print("Invalid user or movie!")
+            return None
+
+        rating_bytes: bytes = self.server.receive_rating(
             user_ownership_map[user], movie_ownership_map[movie]
         )
 
