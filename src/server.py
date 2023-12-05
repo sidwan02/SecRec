@@ -5,6 +5,8 @@ class Server:
     def __init__(
         self,
         public_context: bytes,
+        # TODO: remove this later
+        secret_context: bytes,
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
         secure_division_wrapper: SecureClearDivision,
@@ -35,10 +37,11 @@ class Server:
 
         self.secure_matrix_completion_wrapper = SecureMatrixCompletion(
             # 10,
-            2,
-            50,
-            1e-1,
+            1,
+            20,
+            1e-2,
             public_context,
+            secret_context,
             secure_svd_wrapper,
             secure_clip_wrapper,
             secure_division_wrapper,
@@ -97,7 +100,7 @@ class Server:
 
     def matrix_completion(self):
         self.secure_matrix_completion_wrapper.prepare_data(self.ratings, self.is_filled)
-        self.secure_matrix_completion_wrapper.train()
+        self.ratings = self.secure_matrix_completion_wrapper.train()
 
     # TODO: be able to generate statistics
     # def generate_statistic(self):

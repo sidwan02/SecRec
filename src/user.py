@@ -25,9 +25,14 @@ class User:
         self.combiner.handle_rating(movie, encrypted_rating.serialize(), self.username)
 
     def receive_rating(self, movie: str) -> float:
+        print("RECEIVE RATING")
+        self.combiner.test_print_clear_server_storage(self.encrypt_pk, self.decrypt_sk)
+
         rating_bytes: Union[bytes, None] = self.combiner.receive_rating(
             movie, self.username
         )
+
+        self.combiner.test_print_clear_server_storage(self.encrypt_pk, self.decrypt_sk)
 
         if rating_bytes is None:
             return 0.0

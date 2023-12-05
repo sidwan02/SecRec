@@ -63,8 +63,7 @@ class SecureClip:
 
     def clip(self, x: ts.CKKSVector, min_val: float, max_val: float) -> ts.CKKSVector:
         x.link_context(self.decrypt_sk)
-
-        x_plain = round(m.decrypt()[0], 4)
+        x_plain = round(x.decrypt()[0], 4)
 
         ans = max(min(x_plain, max_val), min_val)
 
@@ -78,11 +77,14 @@ class SecureMatrixCompletion:
         epochs: int,
         alpha: float,
         public_context: bytes,
+        secret_context: bytes,
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
         secure_division_wrapper: SecureClearDivision,
     ):
         self.encrypt_pk = ts.context_from(public_context)
+        # TODO: remove the decrypt_pk later
+        self.decrypt_sk = ts.context_from(secret_context)
 
         # rank / no.of features
         self.r = r
@@ -156,29 +158,48 @@ class SecureMatrixCompletion:
 
             print(f"Iteration {cur_i}, Train loss: {err_train}, Val loss: {err_val}")
 
+        return util.convert_ckks_mat_to_bytes_mat(self.compute_M_prime())
+
     def sgd(self):
         two_encrypted = ts.ckks_vector(self.encrypt_pk, [2])
 
         for s_no, (M_i_j, (i, j), is_filled) in enumerate(
             zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
         ):
+            # print(s_no)
             # there is no update to M if the value is not filled
             e_i_j = (M_i_j - self.pred_rating(i, j)) * is_filled
+
+            # TODO: remove this later
+            e_i_j.link_context(self.decrypt_sk)
+            # print(f"e_i_j: {round(e_i_j.decrypt()[0], 4)}")
 
             # gradient update rules derived from the loss function relation, derivation in the pdf
             # recall that both self.X and self.Y have the same number of cols
             for c in range(self.r):
+                self.X = self.reset_matrix_error(self.X)
+                self.Y = self.reset_matrix_error(self.Y)
+                # print(self.alpha * two_encrypted * e_i_j * self.Y[j, c])
                 self.X[i, c] += self.alpha * two_encrypted * e_i_j * self.Y[j, c]
                 self.Y[j, c] += self.alpha * two_encrypted * e_i_j * self.X[i, c]
 
             # for debugging purposes to see how far we are into the sgd
-            if s_no % 100000 == 0:
-                print(f"Computing: {s_no / (self.n * self.m) * 100} %")
+            # if s_no % 100000 == 0:
+            # print(f"Computing: {s_no / (self.n * self.m) * 100} %")
+
+    # TODO: this is a really bad way of reseting error. We need to find a better way
+    def reset_matrix_error(self, M):
+        decrypted_M = util.decrypt_ckks_mat(M, self.decrypt_sk)
+        return util.encrypt_to_ckks_mat(decrypted_M, self.encrypt_pk)
 
     def pred_rating(self, i, j) -> ts.CKKSVector:
+        self.X = self.reset_matrix_error(self.X)
+        self.Y = self.reset_matrix_error(self.Y)
+
         val = self.X[i, :] @ self.Y[j, :].T
+
         # 0.5 <= rating <= 5
-        val = self.secure_clip_wrapper(val, 0.5, 5)
+        val = self.secure_clip_wrapper.clip(val, 0.5, 5)
         return val
 
     def error(self):
@@ -213,7 +234,10 @@ class SecureMatrixCompletion:
 
     def compute_M_prime(self):
         M_prime = self.X @ self.Y.T
-        M_prime = np.clip(M_prime, 0.5, 5)
+        # M_prime = np.clip(M_prime, 0.5, 5)
+        M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0.5, 5))(
+            M_prime
+        )
         return M_prime
 
     # def generate_output(self):

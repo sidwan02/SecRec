@@ -179,6 +179,10 @@ def convert_bytes_mat_to_ckks_mat(
     return matrix_ckks
 
 
+def convert_ckks_mat_to_bytes_mat(A: List[List[ts.CKKSVector]]) -> List[List[bytes]]:
+    return [[A[i][j].serialize() for j in range(len(A[0]))] for i in range(len(A))]
+
+
 def decrypt_ckks_mat(
     A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
 ) -> List[List[float]]:
