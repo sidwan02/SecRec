@@ -1,23 +1,22 @@
 import secure_algos
 import tenseal as ts
+from typing import Tuple, List
 
 
 class Server:
     def __init__(
         self,
         public_context: bytes,
-        # TODO: remove this later
-        secret_context: bytes,
+        secure_matrix_error_reset_wrapper: secure_algos.SecureMatrixErrorReset,
         secure_svd_wrapper: secure_algos.SecureSVD,
         secure_clip_wrapper: secure_algos.SecureClip,
         secure_division_wrapper: secure_algos.SecureClearDivision,
     ):
         self.storage = {}
 
-        # TODO: both ratings and is_filled are matrices of bytes. This allows for really nice serialization and ultimately storage. Need to implement the encrypted storage + tag storage too though.
+        # Both ratings and is_filled are matrices of bytes. This allows for really nice serialization and ultimately storage, if we were to go in that direction.
 
         # N x M matrix with N users and M movies
-        # encryption and signature of this is maintained separately by the server
         self.ratings = [[]]
 
         # N x M matrix with N users and M movies
@@ -41,7 +40,7 @@ class Server:
             20,
             1e-2,
             public_context,
-            secret_context,
+            secure_matrix_error_reset_wrapper,
             secure_svd_wrapper,
             secure_clip_wrapper,
             secure_division_wrapper,
@@ -104,4 +103,5 @@ class Server:
 
     def receive_rating(self, r: int, c: int) -> bytes:
         predicated_ratings = self.matrix_completion()
+
         return predicated_ratings[r][c]

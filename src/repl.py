@@ -45,30 +45,30 @@ def test_combiner_rating_logic(server, combiner, public_context, secret_context)
     decrypt_sk = ts.context_from(secret_context)
 
     # Tests for handle_rating
-    user1 = User("Bob", combiner, public_context, secret_context)
-    user2 = User("Alice", combiner, public_context, secret_context)
-    user3 = User("Jason", combiner, public_context, secret_context)
+    user1 = User("Bob", combiner, public_context, secret_context, True)
+    user2 = User("Alice", combiner, public_context, secret_context, True)
+    user3 = User("Jason", combiner, public_context, secret_context, True)
 
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
     # TODO: make all util helpers used by util.f rather than f in all files (make it consistent)
     # TODO: this function should be in the server not the combiner
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [3]).serialize(), "Bob")
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie1", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Jason"
     )
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Bob")
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie10", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Alice"
     )
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie1", ts.ckks_vector(encrypt_pk, [4.3]).serialize(), "Alice"
     )
-    # combiner.test_print_clear_server_storage(encrypt_pk, decrypt_sk)
+    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
 
     # Tests for recieve_rating
 
@@ -86,7 +86,7 @@ def demo(server, combiner, public_context, secret_context):
 
     users = []
     for i in range(1, num_users + 1):
-        users.append(User(f"User {i}", combiner, public_context, secret_context))
+        users.append(User(f"User {i}", combiner, public_context, secret_context, True))
 
     movies = [f"Movie {i}" for i in range(1, num_movies + 1)]
 
@@ -109,7 +109,7 @@ def reset_state():
 
     server = Server(
         public_context,
-        secret_context,
+        secure_algos.SecureMatrixErrorReset(public_context, secret_context),
         secure_algos.SecureSVD(public_context, secret_context),
         secure_algos.SecureClip(public_context, secret_context),
         secure_algos.SecureClearDivision(secret_context),
@@ -121,7 +121,7 @@ def reset_state():
 
 if __name__ == "__main__":
     public_context, secret_context, server, combiner = reset_state()
-    user1 = User("Bob", combiner, public_context, secret_context)
+    user1 = User("Bob", combiner, public_context, secret_context, True)
 
     ######### TESTS START #########
     tenseal_util_test()
