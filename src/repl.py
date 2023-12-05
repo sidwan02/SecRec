@@ -39,13 +39,16 @@ def test_handle_rating(server, combiner, public_context, secret_context):
         "movie1", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Jason"
     )
     combiner.test_print_clear_server_storage(decrypt_sk)
-
-    # self.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
-    # print(
-    #     util.decrypt_ckks_mat(
-    #         util.convert_bytes_mat_to_ckks_mat(self.server.ratings), decrypt_sk
-    #     )
-    # )
+    combiner.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Bob")
+    combiner.test_print_clear_server_storage(decrypt_sk)
+    combiner.handle_rating(
+        "movie10", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Alice"
+    )
+    combiner.test_print_clear_server_storage(decrypt_sk)
+    combiner.handle_rating(
+        "movie1", ts.ckks_vector(encrypt_pk, [4.3]).serialize(), "Alice"
+    )
+    combiner.test_print_clear_server_storage(decrypt_sk)
 
 
 if __name__ == "__main__":

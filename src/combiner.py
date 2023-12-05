@@ -183,6 +183,8 @@ class Combiner:
         )
         print(tabulate(df_ratings, headers="keys", tablefmt="psql"))
 
+        # print(decrypted_is_filled)
+
         df_is_filled = pd.DataFrame(
             decrypted_is_filled, columns=column_header, index=row_header
         )

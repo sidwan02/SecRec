@@ -63,6 +63,8 @@ class Server:
 
         for user_ratings in self.ratings:
             user_ratings.append(self.zero_bytes)
+        for filled_row in self.is_filled:
+            filled_row.append(self.zero_bytes)
 
     # adds a new row
     def add_user(self):
