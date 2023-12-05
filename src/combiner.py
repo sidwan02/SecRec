@@ -46,6 +46,7 @@ class Combiner:
 
         self.keyDB.keys[f"{description}-encryptk"] = data_encryptk
         self.keyDB.keys[f"{description}-decryptk"] = data_decryptk
+
         self.keyDB.keys[f"{description}-signk"] = data_signk
         self.keyDB.keys[f"{description}-verifyk"] = data_verifyk
 
