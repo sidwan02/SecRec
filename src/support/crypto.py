@@ -156,6 +156,8 @@ def AsymmetricEncrypt(EncryptionKey: AsymmetricEncryptKey, plaintext: bytes) -> 
     )
     check_type(plaintext, bytes, "plaintext", "AsymmetricEncrypt")
 
+    # print("plaintext len: ", len(plaintext))
+
     c_bytes = EncryptionKey.libPubKey.encrypt(
         plaintext,
         padding.OAEP(
@@ -409,6 +411,11 @@ def SymmetricEncrypt(key: bytes, iv: bytes, plaintext: bytes) -> bytes:
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
     return ciphertext + iv
+
+
+BITS_IN_BYTE: int = 8
+ZERO = 0
+ZERO_SALT: bytes = ZERO.to_bytes(128 // BITS_IN_BYTE, "little")
 
 
 def SymmetricDecrypt(key: bytes, ciphertext: bytes) -> bytes:

@@ -8,6 +8,7 @@ from support.util import (
     encrypt_to_ckks_mat,
     decrypt_ckks_mat,
 )
+import time
 
 
 # TODO: make some tests for encrypt_to_ckks_mat and decrypt_ckks_mat and secure clip and secure clear division
@@ -107,8 +108,8 @@ class SecureMatrixCompletion:
         ratings_mat: List[List[bytes]],
         is_filled_mat: List[List[bytes]],
     ):
-        # m movies, n users
-        self.n, self.m = len(ratings_mat[0]), len(ratings_mat)
+        # m movies (cols), n users (rows)
+        self.n, self.m = len(ratings_mat), len(ratings_mat[0])
 
         self.num_train_values: ts.CKKSVector = ts.ckks_vector(self.encrypt_pk, [0])
 
@@ -156,7 +157,8 @@ class SecureMatrixCompletion:
             self.sgd()
             err_train, err_val = self.error()
 
-            print(f"Iteration {cur_i}, Train loss: {err_train}, Val loss: {err_val}")
+            # print(f"Iteration {cur_i}, Train loss: {err_train}, Val loss: {err_val}")
+            print(f"Iteration {cur_i}, Train loss: {round(err_train, 4)}")
 
         return util.convert_ckks_mat_to_bytes_mat(self.compute_M_prime())
 
@@ -166,6 +168,7 @@ class SecureMatrixCompletion:
         for s_no, (M_i_j, (i, j), is_filled) in enumerate(
             zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
         ):
+            start = time.time()
             # print(s_no)
             # there is no update to M if the value is not filled
             e_i_j = (M_i_j - self.pred_rating(i, j)) * is_filled
@@ -176,16 +179,28 @@ class SecureMatrixCompletion:
 
             # gradient update rules derived from the loss function relation, derivation in the pdf
             # recall that both self.X and self.Y have the same number of cols
+
+            self.X = self.reset_matrix_error(self.X)
+            self.Y = self.reset_matrix_error(self.Y)
             for c in range(self.r):
-                self.X = self.reset_matrix_error(self.X)
-                self.Y = self.reset_matrix_error(self.Y)
                 # print(self.alpha * two_encrypted * e_i_j * self.Y[j, c])
                 self.X[i, c] += self.alpha * two_encrypted * e_i_j * self.Y[j, c]
                 self.Y[j, c] += self.alpha * two_encrypted * e_i_j * self.X[i, c]
 
+            """
+            self.X = self.reset_matrix_error(self.X)
+            self.Y = self.reset_matrix_error(self.Y)
+            # print(self.alpha * two_encrypted * e_i_j * self.Y[j, c])
+            self.X[i, :] += self.alpha * two_encrypted * e_i_j * self.Y[j, :]
+            self.Y[j, :] += self.alpha * two_encrypted * e_i_j * self.X[i, :]
+            """
+
             # for debugging purposes to see how far we are into the sgd
             # if s_no % 100000 == 0:
             # print(f"Computing: {s_no / (self.n * self.m) * 100} %")
+
+            end = time.time()
+            # print(end - start)
 
     # TODO: this is a really bad way of reseting error. We need to find a better way
     def reset_matrix_error(self, M):

@@ -27,10 +27,42 @@ class Combiner:
         # {movie: col_id}
         self.setup_server_storage({}, "movie-ownership")
 
-    def setup_server_storage(self, data, description):
-        plaintext = util.ObjectToBytes(data)
+    def setup_key_storage(self, sym_data_key, description):
+        key_verifyk, key_signk = crypto.SignatureKeyGen()
 
-        data_encryptk, data_decryptk = crypto.AsymmetricKeyGen()
+        # sign the plaintext
+        key_sign = crypto.SignatureSign(data_signk, sym_data_key)
+
+        key_encryptk, key_decryptk = crypto.AsymmetricKeyGen()
+
+        # concat the sign to the plaintext, then encrypt
+        # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
+
+        encrypted_sym_data_key = crypto.AsymmetricEncrypt(key_encryptk, data_key)
+
+        # TODO: see later on if there is a way to concat the sign to the plaintext and not need to store the sign separately
+        self.server.storage[f"{description}-key"] = encrypted_sym_data_key
+        self.server.storage[f"{description}-key-sign"] = data_sign
+
+        self.setup_server_storage(
+            encrypted_key,
+        )
+
+        self.keyDB.keys[f"{description}-key-encryptk"] = key_encryptk
+        self.keyDB.keys[f"{description}-key-decryptk"] = key_decryptk
+        self.keyDB.keys[f"{description}-key-signk"] = data_signk
+        self.keyDB.keys[f"{description}-key-verifyk"] = data_verifyk
+
+    def setup_server_storage(self, data, description):
+        if type(data) != bytes:
+            plaintext = util.ObjectToBytes(data)
+        else:
+            plaintext = data
+
+        data_key = crypto.PasswordKDF(
+            description, crypto.ZERO_SALT, 128 // crypto.BITS_IN_BYTE
+        )
+
         data_verifyk, data_signk = crypto.SignatureKeyGen()
 
         # sign the plaintext
@@ -38,14 +70,18 @@ class Combiner:
 
         # concat the sign to the plaintext, then encrypt
         # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
-        ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext)
+
+        data_iv: bytes = crypto.SecureRandom(128 // BITS_IN_BYTE)
+        ciphertext = crypto.SymmetricEncrypt(data_key, data_iv, plaintext)
 
         # TODO: see later on if there is a way to concat the sign to the plaintext and not need to store the sign separately
         self.server.storage[description] = ciphertext
         self.server.storage[f"{description}-sign"] = data_sign
 
-        self.keyDB.keys[f"{description}-encryptk"] = data_encryptk
-        self.keyDB.keys[f"{description}-decryptk"] = data_decryptk
+        self.setup_key_storage(encrypted_key, description)
+
+        self.keyDB.keys[f"{description}-key_encryptk"] = key_encryptk
+        self.keyDB.keys[f"{description}-key_decryptk"] = key_decryptk
         self.keyDB.keys[f"{description}-signk"] = data_signk
         self.keyDB.keys[f"{description}-verifyk"] = data_verifyk
 

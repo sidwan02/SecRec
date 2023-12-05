@@ -33,3 +33,5 @@ dist/
 .DS_Store
 
 .vscode/
+SEAL-Python/
+Pyfhel/

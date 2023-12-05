@@ -1,12 +1,13 @@
 import tenseal as ts
 import numpy as np
+import time
 
 # controls precision of the fractional part
 bits_scale = 26
 
 context = ts.context(
     ts.SCHEME_TYPE.CKKS,
-    poly_modulus_degree=8192,
+    poly_modulus_degree=32768,
     coeff_mod_bit_sizes=[
         31,
         bits_scale,
@@ -106,6 +107,9 @@ for i in range(2):
 
 print(plaintext_matrix)
 
+
+start = time.time()
+
 a = np.array(
     [
         [
@@ -123,12 +127,16 @@ b = np.array(
     ]
 )
 
+
 c = a @ b
 
 val = c[0, 0]
 val.link_context(secret_key)
 print(round(val.decrypt()[0], 4))
 
+end = time.time()
+
+print(end - start)
 
 # Multiplication scaling limit
 enc_one = ts.ckks_vector(public_key, np.array([1]))
@@ -140,6 +148,18 @@ for i in range(100):
     decrypted = round(ans.decrypt()[0], 4)
     ans = ts.ckks_vector(public_key, np.array([decrypted]))
     ans *= enc_one
+
+# Multiplication scaling limit
+plain_one = ts.plain_tensor(np.array([1]))
+
+ans = enc_one
+
+for i in range(100):
+    print(i)
+    # ans.link_context(secret_key)
+    # decrypted = round(ans.decrypt()[0], 4)
+    # ans = ts.ckks_vector(public_key, np.array([decrypted]))
+    ans += enc_one
 
 ans.link_context(secret_key)
 print(ans.decrypt())

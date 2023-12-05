@@ -41,6 +41,6 @@ class User:
         m.link_context(self.decrypt_sk)
 
         rating_plain = round(m.decrypt()[0], 4)
-        print(rating_plain)
+        # print(rating_plain)
 
         return rating_plain

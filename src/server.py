@@ -38,7 +38,7 @@ class Server:
         self.secure_matrix_completion_wrapper = SecureMatrixCompletion(
             # 10,
             1,
-            20,
+            10,
             1e-2,
             public_context,
             secret_context,
