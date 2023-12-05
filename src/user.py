@@ -26,15 +26,23 @@ class User:
     def receive_rating(self, movie: str) -> float:
         if self.demo:
             print("real ratings:")
-            self.combiner.pretty_print_ratings(self.encrypt_pk, self.decrypt_sk)
+            self.combiner.pretty_print_server_matrix(
+                "ratings", self.encrypt_pk, self.decrypt_sk
+            )
+            print("bool user-filled:")
+            self.combiner.pretty_print_server_matrix(
+                "is_filled", self.encrypt_pk, self.decrypt_sk
+            )
 
         rating_bytes: Union[bytes, None] = self.combiner.receive_rating(
-            movie, self.username
+            movie, self.username, self.demo
         )
 
         if self.demo:
             print("predicted ratings:")
-            self.combiner.pretty_print_ratings(self.encrypt_pk, self.decrypt_sk)
+            self.combiner.pretty_print_server_matrix(
+                "predicted", self.encrypt_pk, self.decrypt_sk
+            )
 
         if rating_bytes is None:
             return 0.0

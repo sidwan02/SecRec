@@ -50,29 +50,20 @@ def test_combiner_rating_logic(server, combiner, public_context, secret_context)
     user3 = User("Jason", combiner, public_context, secret_context, True)
 
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
-    # TODO: make all util helpers used by util.f rather than f in all files (make it consistent)
-    # TODO: this function should be in the server not the combiner
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [3]).serialize(), "Bob")
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie1", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Jason"
     )
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Bob")
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie10", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Alice"
     )
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
     combiner.handle_rating(
         "movie1", ts.ckks_vector(encrypt_pk, [4.3]).serialize(), "Alice"
     )
-    # combiner.pretty_print_ratings(encrypt_pk, decrypt_sk)
 
     # Tests for recieve_rating
 
-    # assert math.isclose(user1.receive_rating("movie1"), 3.0)
     print(user1.receive_rating("movie1"))
     assert math.isclose(user3.receive_rating("movie5"), 0.0)
 

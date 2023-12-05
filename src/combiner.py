@@ -141,7 +141,7 @@ class Combiner:
             rating, user_ownership_map[user], movie_ownership_map[movie]
         )
 
-    def receive_rating(self, movie: str, user: str) -> Union[None, bytes]:
+    def receive_rating(self, movie: str, user: str, demo) -> Union[None, bytes]:
         movie_ownership_map = self.retrieve_server_storage("movie-ownership")
         user_ownership_map = self.retrieve_server_storage("user-ownership")
 
@@ -150,7 +150,7 @@ class Combiner:
             return None
 
         rating_bytes = self.server.receive_rating(
-            user_ownership_map[user], movie_ownership_map[movie]
+            user_ownership_map[user], movie_ownership_map[movie], demo
         )
 
         return rating_bytes
@@ -164,34 +164,14 @@ class Combiner:
         self.server_store(b, "test 1")
         assert b == self.retrieve_server_storage("test 1")
 
-    def pretty_print_is_filled(self, encrypt_pk: ts.Context, decrypt_sk: ts.Context):
-        decrypted_is_filled = np.array(
-            util.decrypt_ckks_mat(
-                util.convert_bytes_mat_to_ckks_mat(self.server.is_filled, encrypt_pk),
-                decrypt_sk,
-            ),
-        )
-
-        movie_ownership_map = self.retrieve_server_storage("movie-ownership")
-        user_ownership_map = self.retrieve_server_storage("user-ownership")
-
-        column_header = [None for _ in range(len(movie_ownership_map))]
-        for movie, col_id in movie_ownership_map.items():
-            column_header[col_id] = movie
-
-        row_header = [None for _ in range(len(user_ownership_map))]
-        for user, row_id in user_ownership_map.items():
-            row_header[row_id] = user
-
-        df_is_filled = pd.DataFrame(
-            decrypted_is_filled, columns=column_header, index=row_header
-        )
-        print(tabulate(df_is_filled, headers="keys", tablefmt="psql"))
-
-    def pretty_print_ratings(self, encrypt_pk: ts.Context, decrypt_sk: ts.Context):
+    def pretty_print_server_matrix(
+        self, description: str, encrypt_pk: ts.Context, decrypt_sk: ts.Context
+    ):
         decrypted_ratings = np.array(
             util.decrypt_ckks_mat(
-                util.convert_bytes_mat_to_ckks_mat(self.server.ratings, encrypt_pk),
+                util.convert_bytes_mat_to_ckks_mat(
+                    self.server.matrices[description], encrypt_pk
+                ),
                 decrypt_sk,
             )
         )

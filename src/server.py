@@ -16,16 +16,18 @@ class Server:
 
         # Both ratings and is_filled are matrices of bytes. This allows for really nice serialization and ultimately storage, if we were to go in that direction.
 
-        # N x M matrix with N users and M movies
-        self.ratings = [[]]
-
-        # N x M matrix with N users and M movies
-        # The values are either 0 (value not filled) or 1 (value has been filled)
-        # encryption and signature of this is maintained separately by the server
-
-        # One disadvantage of having a matrix of bools:
-        # ideally we wanna generate train test splits of indices + we need the ability to perform encryptions with the encryption key so we would be able to determine which entries are 0 and 1 anyways by manually checking against each row.
-        self.is_filled = [[]]
+        self.matrices = {
+            # N x M matrix with N users and M movies
+            "ratings": [[]],
+            # N x M matrix with N users and M movies
+            # The values are either 0 (value not filled) or 1 (value has been filled)
+            # encryption and signature of this is maintained separately by the server
+            # One disadvantage of having a matrix of bools:
+            # ideally we wanna generate train test splits of indices + we need the ability to perform encryptions with the encryption key so we would be able to determine which entries are 0 and 1 anyways by manually checking against each row.
+            "is_filled": [[]],
+            # this is only filled for the demo
+            "predicted": [[]],
+        }
 
         self.users_added_init = 0
         self.movies_added_init = 0
@@ -56,17 +58,17 @@ class Server:
             else:
                 assert self.users_added_init == 1
                 self.init_complete = True
-                self.ratings = [
+                self.matrices["ratings"] = [
                     [self.zero_bytes for _ in range(self.movies_added_init)]
                 ]
-                self.is_filled = [
+                self.matrices["is_filled"] = [
                     [self.zero_bytes for _ in range(self.movies_added_init)]
                 ]
             return
 
-        for user_ratings in self.ratings:
+        for user_ratings in self.matrices["ratings"]:
             user_ratings.append(self.zero_bytes)
-        for filled_row in self.is_filled:
+        for filled_row in self.matrices["is_filled"]:
             filled_row.append(self.zero_bytes)
 
     # adds a new row
@@ -77,31 +79,38 @@ class Server:
             else:
                 assert self.movies_added_init == 1
                 self.init_complete = True
-                self.ratings = [
+                self.matrices["ratings"] = [
                     [self.zero_bytes] for _ in range(self.movies_added_init)
                 ]
-                self.is_filled = [
+                self.matrices["is_filled"] = [
                     [self.zero_bytes] for _ in range(self.movies_added_init)
                 ]
             return
 
-        num_movies = len(self.ratings[0])
+        num_movies = len(self.matrices["ratings"][0])
 
         # The default rating is 0 (invalid). Valid ratings are between 0.5 and 5.0
-        self.ratings.append([self.zero_bytes for _ in range(num_movies)])
-        self.is_filled.append([self.zero_bytes for _ in range(num_movies)])
+        self.matrices["ratings"].append([self.zero_bytes for _ in range(num_movies)])
+        self.matrices["is_filled"].append([self.zero_bytes for _ in range(num_movies)])
 
     def modify_rating(self, rating: bytes, r: int, c: int):
-        self.ratings[r][c] = rating
+        self.matrices["ratings"][r][c] = rating
 
     def modify_filled(self, filled_status: bytes, r: int, c: int):
-        self.is_filled[r][c] = filled_status
+        self.matrices["is_filled"][r][c] = filled_status
 
     def matrix_completion(self):
-        self.secure_matrix_completion_wrapper.prepare_data(self.ratings, self.is_filled)
+        self.secure_matrix_completion_wrapper.prepare_data(
+            self.matrices["ratings"], self.matrices["is_filled"]
+        )
         return self.secure_matrix_completion_wrapper.train()
 
-    def receive_rating(self, r: int, c: int) -> bytes:
+    def receive_rating(self, r: int, c: int, demo) -> bytes:
         predicated_ratings = self.matrix_completion()
+
+        if demo:
+            self.matrices["predicted"] = predicated_ratings
+        else:
+            self.matrices["predicted"] = [[]]
 
         return predicated_ratings[r][c]
