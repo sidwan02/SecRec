@@ -7,11 +7,8 @@ import tenseal as ts
 import base64
 from support.util import tenseal_util_test
 
-if __name__ == "__main__":
-    # generate the global pk (this is naively done as a POC measure)
-    # global_pk, global_sk = crypto.AsymmetricKeyGen()
 
-    # Create all the users. Also, create the FHE key pair.
+def setup_contexts():
     context = ts.context(
         ts.SCHEME_TYPE.CKKS,
         poly_modulus_degree=8192,
@@ -25,6 +22,39 @@ if __name__ == "__main__":
     context.make_context_public()
     public_context = context.serialize()
 
+    return public_context, secret_context
+
+
+def test_handle_rating(server, combiner, public_context, secret_context):
+    # TODO: modularize this into a helper function called in multiple tests + other places
+    encrypt_pk = ts.context_from(public_context)
+    decrypt_sk = ts.context_from(secret_context)
+
+    combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
+    # TODO: make all util helpers used by util.f rather than f in all files (make it consistent)
+    combiner.test_print_clear_server_storage(decrypt_sk)
+    combiner.handle_rating("movie1", ts.ckks_vector(encrypt_pk, [3]).serialize(), "Bob")
+    combiner.test_print_clear_server_storage(decrypt_sk)
+    combiner.handle_rating(
+        "movie1", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Jason"
+    )
+    combiner.test_print_clear_server_storage(decrypt_sk)
+
+    # self.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [1]).serialize(), "Bob")
+    # print(
+    #     util.decrypt_ckks_mat(
+    #         util.convert_bytes_mat_to_ckks_mat(self.server.ratings), decrypt_sk
+    #     )
+    # )
+
+
+if __name__ == "__main__":
+    # generate the global pk (this is naively done as a POC measure)
+    # global_pk, global_sk = crypto.AsymmetricKeyGen()
+
+    # Create all the users. Also, create the FHE key pair.
+    public_context, secret_context = setup_contexts()
+
     server = Server(
         public_context,
         SecureSVD(public_context, secret_context),
@@ -36,6 +66,7 @@ if __name__ == "__main__":
     user1 = User("Bob", combiner, public_context, secret_context)
 
     ######### TESTS START #########
-    combiner.test_server_storage()
-    tenseal_util_test()
+    # combiner.test_server_storage()
+    # tenseal_util_test()
+    test_handle_rating(server, combiner, public_context, secret_context)
     ######### TESTS END #########

@@ -3,6 +3,9 @@ import support.crypto as crypto
 from typing import List, Union
 from support import util
 import tenseal as ts
+import numpy as np
+import pandas as pd
+from tabulate import tabulate
 
 # The combiner does not have the ability to store information (if it did, then the problem becomes to easy). It must store all information with the server.
 
@@ -122,3 +125,65 @@ class Combiner:
         b = {"bye": 100}
         self.server_store(b, "test 1")
         assert b == self.retrieve_server_storage("test 1")
+
+    def test_print_clear_server_storage(self, decrypt_sk: ts.Context):
+        decrypted_ratings = np.array(
+            util.decrypt_ckks_mat(
+                util.convert_bytes_mat_to_ckks_mat(self.server.ratings), decrypt_sk
+            )
+        )
+
+        decrypted_is_filled = np.array(
+            util.decrypt_ckks_mat(
+                util.convert_bytes_mat_to_ckks_mat(self.server.is_filled), decrypt_sk
+            )
+        )
+
+        movie_ownership_map = self.retrieve_server_storage("movie-ownership")
+        user_ownership_map = self.retrieve_server_storage("user-ownership")
+
+        """
+        column_header = [[None for _ in range(len(movie_ownership_map))]]
+        for movie, col_id in movie_ownership_map.items():
+            column_header[0][col_id] = movie
+        # print(f"column_header: {column_header}")
+
+        # the +1 is for the top left cell which is empty (intersection between column names and row names)
+        row_header = [[""] for _ in range(len(user_ownership_map) + 1)]
+        for user, row_id in user_ownership_map.items():
+            row_header[row_id + 1][0] = user
+        # print(f"row_header: {row_header}")
+
+        decrypted_ratings = np.r_[column_header, decrypted_ratings]
+        decrypted_is_filled = np.r_[column_header, decrypted_is_filled]
+
+        # print(decrypted_ratings)
+        # print(decrypted_is_filled)
+
+        decrypted_ratings = np.c_[row_header, decrypted_ratings]
+        decrypted_is_filled = np.c_[row_header, decrypted_is_filled]
+
+        print(" | ", end="")
+        for name in columns:
+            print(name.center(10, " "), end="")
+            print(" | ", end="")
+        print("")
+        """
+
+        column_header = [None for _ in range(len(movie_ownership_map))]
+        for movie, col_id in movie_ownership_map.items():
+            column_header[col_id] = movie
+
+        row_header = [None for _ in range(len(user_ownership_map))]
+        for user, row_id in user_ownership_map.items():
+            row_header[row_id] = user
+
+        df_ratings = pd.DataFrame(
+            decrypted_ratings, columns=column_header, index=row_header
+        )
+        print(tabulate(df_ratings, headers="keys", tablefmt="psql"))
+
+        df_is_filled = pd.DataFrame(
+            decrypted_is_filled, columns=column_header, index=row_header
+        )
+        print(tabulate(df_is_filled, headers="keys", tablefmt="psql"))
