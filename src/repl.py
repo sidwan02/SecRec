@@ -1,12 +1,14 @@
 from combiner import Combiner
 from user import User
 from server import Server
-from matrix_completion import SecureSVD, SecureClip, SecureClearDivision
+import secure_algos
 import support.crypto as crypto
 import tenseal as ts
 import base64
 from support.util import tenseal_util_test
 import math
+import random
+import numpy as np
 
 
 def setup_contexts():
@@ -39,7 +41,6 @@ def setup_contexts():
 
 
 def test_combiner_rating_logic(server, combiner, public_context, secret_context):
-    # TODO: modularize this into a helper function called in multiple tests + other places
     encrypt_pk = ts.context_from(public_context)
     decrypt_sk = ts.context_from(secret_context)
 
@@ -76,26 +77,60 @@ def test_combiner_rating_logic(server, combiner, public_context, secret_context)
     assert math.isclose(user3.receive_rating("movie5"), 0.0)
 
 
-if __name__ == "__main__":
-    # generate the global pk (this is naively done as a POC measure)
-    # global_pk, global_sk = crypto.AsymmetricKeyGen()
+def demo(server, combiner, public_context, secret_context):
+    encrypt_pk = ts.context_from(public_context)
+    decrypt_sk = ts.context_from(secret_context)
 
-    # Create all the users. Also, create the FHE key pair.
+    num_users = 10
+    num_movies = 10
+
+    users = []
+    for i in range(1, num_users + 1):
+        users.append(User(f"User {i}", combiner, public_context, secret_context))
+
+    movies = [f"Movie {i}" for i in range(1, num_movies + 1)]
+
+    for i in range(len(movies) * len(users)):
+        add_rating = np.random.rand() < 0.8
+
+        if add_rating:
+            user = users[random.randint(0, num_users - 1)]
+            movie = movies[random.randint(0, num_movies - 1)]
+
+            rating = random.choice([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0])
+            user.send_rating(movie, rating)
+
+    # Ratings test
+    print(users[0].receive_rating("Movie 3"))
+
+
+def reset_state():
     public_context, secret_context = setup_contexts()
 
     server = Server(
         public_context,
         secret_context,
-        SecureSVD(public_context, secret_context),
-        SecureClip(public_context, secret_context),
-        SecureClearDivision(secret_context),
+        secure_algos.SecureSVD(public_context, secret_context),
+        secure_algos.SecureClip(public_context, secret_context),
+        secure_algos.SecureClearDivision(secret_context),
     )
     combiner = Combiner(server, public_context)
 
+    return public_context, secret_context, server, combiner
+
+
+if __name__ == "__main__":
+    public_context, secret_context, server, combiner = reset_state()
     user1 = User("Bob", combiner, public_context, secret_context)
 
     ######### TESTS START #########
-    # combiner.test_server_storage()
-    # tenseal_util_test()
+    tenseal_util_test()
+    combiner.test_server_storage()
     test_combiner_rating_logic(server, combiner, public_context, secret_context)
     ######### TESTS END #########
+
+    public_context, secret_context, server, combiner = reset_state()
+
+    ######### DEMO ###########
+    demo(server, combiner, public_context, secret_context)
+    ######### DEMO END #######

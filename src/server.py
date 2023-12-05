@@ -1,4 +1,5 @@
-from matrix_completion import *
+import secure_algos
+import tenseal as ts
 
 
 class Server:
@@ -7,9 +8,9 @@ class Server:
         public_context: bytes,
         # TODO: remove this later
         secret_context: bytes,
-        secure_svd_wrapper: SecureSVD,
-        secure_clip_wrapper: SecureClip,
-        secure_division_wrapper: SecureClearDivision,
+        secure_svd_wrapper: secure_algos.SecureSVD,
+        secure_clip_wrapper: secure_algos.SecureClip,
+        secure_division_wrapper: secure_algos.SecureClearDivision,
     ):
         self.storage = {}
 
@@ -35,8 +36,7 @@ class Server:
         self.encrypt_pk = ts.context_from(public_context)
         self.zero_bytes = ts.ckks_vector(self.encrypt_pk, [0]).serialize()
 
-        self.secure_matrix_completion_wrapper = SecureMatrixCompletion(
-            # 10,
+        self.secure_matrix_completion_wrapper = secure_algos.SecureMatrixCompletion(
             1,
             20,
             1e-2,
@@ -100,13 +100,8 @@ class Server:
 
     def matrix_completion(self):
         self.secure_matrix_completion_wrapper.prepare_data(self.ratings, self.is_filled)
-        self.ratings = self.secure_matrix_completion_wrapper.train()
-
-    # TODO: be able to generate statistics
-    # def generate_statistic(self):
-    #     self.matrix_completion()
+        return self.secure_matrix_completion_wrapper.train()
 
     def receive_rating(self, r: int, c: int) -> bytes:
-        # TODO: optimization is that if the rating already exists then there isn't a need to recompute the matrix completion. This could be in the form of a flag sent by the combiner.
-        self.matrix_completion()
-        return self.ratings[r][c]
+        predicated_ratings = self.matrix_completion()
+        return predicated_ratings[r][c]

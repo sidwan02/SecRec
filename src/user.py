@@ -24,9 +24,12 @@ class User:
         encrypted_rating = ts.ckks_vector(self.encrypt_pk, [rating])
         self.combiner.handle_rating(movie, encrypted_rating.serialize(), self.username)
 
-    def receive_rating(self, movie: str) -> float:
-        print("RECEIVE RATING")
-        self.combiner.test_print_clear_server_storage(self.encrypt_pk, self.decrypt_sk)
+    def receive_rating(self, movie: str, demo=False) -> float:
+        if demo:
+            print("real recommendations:")
+            self.combiner.test_print_clear_server_storage(
+                self.encrypt_pk, self.decrypt_sk
+            )
 
         rating_bytes: Union[bytes, None] = self.combiner.receive_rating(
             movie, self.username
@@ -41,6 +44,5 @@ class User:
         m.link_context(self.decrypt_sk)
 
         rating_plain = round(m.decrypt()[0], 4)
-        # print(rating_plain)
 
         return rating_plain

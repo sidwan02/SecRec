@@ -11,9 +11,6 @@ from support.util import (
 import time
 
 
-# TODO: make some tests for encrypt_to_ckks_mat and decrypt_ckks_mat and secure clip and secure clear division
-
-
 class SecureClearDivision:
     def __init__(self, secret_context: bytes):
         self.decrypt_sk = ts.context_from(secret_context)
@@ -38,14 +35,6 @@ class SecureSVD:
     def compute_SVD(
         self, A: List[List[bytes]], r: int
     ) -> Tuple[List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]]:
-        # same api as:
-        # U, S, vT = slinalg.svds(ratings, self.r)
-        # m movies, n users
-        # U is n x r
-        # vT is r x m
-
-        # TODO: we will replace this with a secure SVD implementation later.
-
         ratings_mat = decrypt_ckks_mat(A, self.decrypt_sk)
 
         U, _, vT = slinalg.svds(ratings_mat, k=r)
@@ -57,8 +46,6 @@ class SecureSVD:
 
 class SecureClip:
     def __init__(self, public_context: bytes, secret_context: bytes):
-        # Look into https://medium.com/optalysys/max-min-and-sort-functions-using-programmable-bootstrapping-in-concrete-fhe-ac4d9378f17d
-
         self.encrypt_sk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
 
@@ -249,27 +236,7 @@ class SecureMatrixCompletion:
 
     def compute_M_prime(self):
         M_prime = self.X @ self.Y.T
-        # M_prime = np.clip(M_prime, 0.5, 5)
         M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0.5, 5))(
             M_prime
         )
         return M_prime
-
-    # def generate_output(self):
-    #     M_prime = self.compute_M_prime()
-
-    #     f = open("mat_comp_ans", "w")
-    #     for i, j in self.queries:
-    #         f.write(f"{M_prime[i, j]}\n")
-    #     f.close()
-
-    # when the user writes they write the whole row, then everyone uses PIR to access it
-    # singular key is ok. But see if there's
-
-
-# mf = MatrixFactorization(file_path="./mat_comp", r=30, epochs=10, alpha=1e-3)
-# print("starting train")
-# mf.train()
-# print(mf.M)
-# print(mf.compute_M_prime())
-# mf.generate_output()
