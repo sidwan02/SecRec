@@ -26,6 +26,7 @@ class Combiner:
         self.setup_server_storage({}, "movie-ownership")
 
     # data key is a symmetric key
+    # we must perform this hybrid encryption since RSA (asymmetric encryption) has an upper bound plaintext size, while symmetric AES uses block chaining and can scale with plaintest size.
     def setup_key_storage(self, data_key, description):
         key_verifyk, key_signk = crypto.SignatureKeyGen()
 
@@ -34,9 +35,6 @@ class Combiner:
 
         # generate the keys for
         key_encryptk, key_decryptk = crypto.AsymmetricKeyGen()
-
-        # concat the sign to the plaintext, then encrypt
-        # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
 
         ciphertext_key = crypto.AsymmetricEncrypt(key_encryptk, data_key)
 
@@ -61,26 +59,19 @@ class Combiner:
         # sign the plaintext
         data_sign = crypto.SignatureSign(data_signk, plaintext)
 
-        # concat the sign to the plaintext, then encrypt
-        # ciphertext = crypto.AsymmetricEncrypt(data_encryptk, plaintext + data_sign)
-
-        # TODO: could have an iv as well
-        # data_iv: bytes = crypto.SecureRandom(128 // BITS_IN_BYTE)
+        # later, could also have a random iv (we have the api for it in support.crypto)
         ciphertext = crypto.SymmetricEncrypt(data_key, crypto.ZERO_SALT, plaintext)
 
-        # TODO: see later on if there is a way to concat the sign to the plaintext and not need to store the sign separately
         self.server.storage[description] = ciphertext
         self.server.storage[f"{description}-sign"] = data_sign
 
         self.setup_key_storage(data_key, f"{description}-key")
 
-        # TODO: at some point verify what asymmetric keys can be stored on the keyDB and what can't be.
+        # right now, we're storing both the sign and verify keys in the trusted key storage. Later, ideally, only the public keys should be stored here and the private keys should be stored on the server.
         self.keyDB.keys[f"{description}-signk"] = data_signk
         self.keyDB.keys[f"{description}-verifyk"] = data_verifyk
 
     def server_store(self, data, description):
-        # print(data)
-        # TODO: if the plaintext gets too large, the asymmetric encryption just failes for some reason.
         plaintext = util.ObjectToBytes(data)
 
         # sign the plaintext
@@ -89,9 +80,7 @@ class Combiner:
         )
 
         data_key = self.retrieve_server_storage_key(f"{description}-key")
-        # print(self.keyDB.keys[f"{description}-encryptk"])
 
-        # concat the sign to the plaintext, then encrypt
         ciphertext = crypto.SymmetricEncrypt(data_key, crypto.ZERO_SALT, plaintext)
 
         self.server.storage[description] = ciphertext
@@ -102,9 +91,7 @@ class Combiner:
             self.keyDB.keys[f"{description}-decryptk"], self.server.storage[description]
         )
 
-        # TODO: get the signature separately.
         signature = self.server.storage[f"{description}-sign"]
-        # plaintext, signature = concat_plaintext[:-512], concat_plaintext[-512:]
 
         if not crypto.SignatureVerify(
             self.keyDB.keys[f"{description}-verifyk"], plaintext, signature
@@ -119,9 +106,7 @@ class Combiner:
 
         plaintext = crypto.SymmetricDecrypt(data_key, self.server.storage[description])
 
-        # TODO: get the signature separately.
         signature = self.server.storage[f"{description}-sign"]
-        # plaintext, signature = concat_plaintext[:-512], concat_plaintext[-512:]
 
         if not crypto.SignatureVerify(
             self.keyDB.keys[f"{description}-verifyk"], plaintext, signature
