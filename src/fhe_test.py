@@ -91,3 +91,26 @@ for i in range(2):
         plaintext_matrix[i][j] = round(m2.decrypt()[0], 4)
 
 print(plaintext_matrix)
+
+a = np.array(
+    [
+        [
+            ts.ckks_vector(public_key, np.array([1])),
+            ts.ckks_vector(public_key, np.array([2])),
+            ts.ckks_vector(public_key, np.array([3])),
+        ]
+    ]
+)
+b = np.array(
+    [
+        [ts.ckks_vector(public_key, np.array([1]))],
+        [ts.ckks_vector(public_key, np.array([2]))],
+        [ts.ckks_vector(public_key, np.array([3]))],
+    ]
+)
+
+c = a @ b
+
+val = c[0, 0]
+val.link_context(secret_key)
+print(round(val.decrypt()[0], 4))

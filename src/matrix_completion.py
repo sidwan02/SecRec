@@ -3,45 +3,11 @@ from scipy.sparse import linalg as slinalg
 from support import crypto, util
 import tenseal as ts
 from typing import List, Tuple
-
-
-def convert_bytes_mat_to_ckks_mat(
-    A: List[List[bytes]],
-) -> List[List[ts.CKKSVector]]:
-    return [
-        [ts.lazy_ckks_vector_from(A[i][j]) for j in range(len(A[0]))]
-        for i in range(len(A))
-    ]
-
-
-def decrypt_ckks_mat(
-    A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
-) -> List[List[float]]:
-    plaintext_mat = np.empty((len(A[0]), len(A)), dtype=float)
-
-    for i in range(len(A)):
-        for j in range(len(A[0])):
-            m = A[i][j]
-            m.link_context(decrypt_sk)
-            plaintext_mat[i][j] = round(m.decrypt()[0], 4)
-
-    print(plaintext_matrix)
-
-    return plaintext_mat
-
-
-def encrypt_to_ckks_mat(
-    A: List[List[float]], encrypt_pk: ts.Context
-) -> List[List[ts.CKKSVector]]:
-    cipher_matrix = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
-
-    for i in range(len(A)):
-        for j in range(len(A[0])):
-            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]])
-
-    cipher_matrix = np.array(cipher_matrix)
-
-    return cipher_matrix
+from support.util import (
+    convert_bytes_mat_to_ckks_mat,
+    encrypt_to_ckks_mat,
+    decrypt_ckks_mat,
+)
 
 
 # TODO: make some tests for encrypt_to_ckks_mat and decrypt_ckks_mat and secure clip and secure clear division

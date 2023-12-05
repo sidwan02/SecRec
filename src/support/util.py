@@ -12,6 +12,9 @@
 import code
 import json
 import base64
+import tenseal as ts
+from typing import List
+import numpy as np
 
 
 def _print_bytes(b: bytes) -> None:
@@ -155,3 +158,67 @@ def BytesToObject(b: bytes) -> object:
 class DropboxError(Exception):
     def __init__(self, msg="DROPBOX ERROR", *args, **kwargs):
         super().__init__(msg, *args, **kwargs)
+
+
+############# Tenseal Util #############
+def convert_bytes_mat_to_ckks_mat(
+    A: List[List[bytes]],
+) -> List[List[ts.CKKSVector]]:
+    return [
+        [ts.lazy_ckks_vector_from(A[i][j]) for j in range(len(A[0]))]
+        for i in range(len(A))
+    ]
+
+
+def decrypt_ckks_mat(
+    A: List[List[ts.CKKSVector]], decrypt_sk: ts.Context
+) -> List[List[float]]:
+    plaintext_mat = np.empty((len(A), len(A[0])), dtype=float)
+
+    for i in range(len(A)):
+        for j in range(len(A[0])):
+            m = A[i][j]
+            m.link_context(decrypt_sk)
+            plaintext_mat[i][j] = round(m.decrypt()[0], 4)
+
+    return plaintext_mat
+
+
+def encrypt_to_ckks_mat(
+    A: List[List[float]], encrypt_pk: ts.Context
+) -> List[List[ts.CKKSVector]]:
+    cipher_matrix = [[None for _ in range(len(A[0]))] for _ in range(len(A))]
+
+    for i in range(len(A)):
+        for j in range(len(A[0])):
+            cipher_matrix[i][j] = ts.ckks_vector(encrypt_pk, [A[i][j]])
+
+    cipher_matrix = np.array(cipher_matrix)
+
+    return cipher_matrix
+
+
+def tenseal_util_test():
+    context = ts.context(
+        ts.SCHEME_TYPE.CKKS,
+        poly_modulus_degree=8192,
+        coeff_mod_bit_sizes=[60, 40, 40, 60],
+    )
+    context.generate_galois_keys()
+    context.global_scale = 2**40
+
+    secret_context = context.serialize(save_secret_key=True)
+
+    context.make_context_public()
+    public_context = context.serialize()
+
+    encrypt_pk = ts.context_from(public_context)
+    decrypt_sk = ts.context_from(secret_context)
+
+    a = [[1, 2], [3, 4], [5, 6]]
+    encrypted_mat = encrypt_to_ckks_mat(a, encrypt_pk)
+
+    assert np.array_equal(decrypt_ckks_mat(encrypted_mat, decrypt_sk), a)
+
+
+############# Tenseal Util End #############

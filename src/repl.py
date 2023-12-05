@@ -5,6 +5,7 @@ from matrix_completion import SecureSVD, SecureClip, SecureClearDivision
 import support.crypto as crypto
 import tenseal as ts
 import base64
+from support.util import tenseal_util_test
 
 if __name__ == "__main__":
     # generate the global pk (this is naively done as a POC measure)
@@ -36,4 +37,5 @@ if __name__ == "__main__":
 
     ######### TESTS START #########
     combiner.test_server_storage()
+    tenseal_util_test()
     ######### TESTS END #########
