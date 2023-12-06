@@ -22,7 +22,16 @@ class SecureClearDivision:
         ans = x_plain / y_plain
 
         return ans
-
+    
+# Wrapper class for normalizing a vector and decrypting it
+class SecureClearNormalize:
+    def __init__(self, secret_context: bytes):
+        self.decrypt_sk = ts.context_from(secret_context)
+    
+    def normalize(self, x : List[ts.CKKSVector]) -> np.ndarray[float]:
+        plaintext_vec : np.ndarray[float] = np.ndarray(util.decrypt_ckks_vec(x))
+        plaintext_norm : float = np.linalg.norm(plaintext_vec)
+        return plaintext_vec / plaintext_norm
 
 class SecureMatrixErrorReset:
     def __init__(self, public_context, secret_context):
@@ -81,11 +90,11 @@ class SecureSVD:
 
         # We need to do this multiplication to guarentee we have a square matrix
         if rows > cols:
-            B : List[ts.CKKSVector] = A.T @ A
+            B : List[List[ts.CKKSVector]] = A.T @ A
         elif rows < cols:
-            B : List[ts.CKKSVector] = A @ A.T
+            B : List[List[ts.CKKSVector]] = A @ A.T
         else:
-            B : List[ts.CKKSVector] = A
+            B : List[List[ts.CKKSVector]] = A
 
          # Cap iterations at max_iter (can use this to empirically determine good iteration numbers)
         for iteration in range(max_iter):
