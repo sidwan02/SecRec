@@ -4,6 +4,7 @@ from support import crypto, util
 import tenseal as ts
 from typing import List, Tuple
 import time
+import math
 
 
 # Eventually, these wrapper classes (division, error reset, svd, clip) can have a privacy budget preventing the server from calling them for nefarious purposes (within reasonable estimates).
@@ -102,7 +103,7 @@ class SecureSVD:
             # Termination condition, our eigenvalues did not significantly change
             if abs(np.dot(eigenvector, new_eigenvector)) > 1 - epsilon:
                 if self.debug:
-                    print(f"Terminated after {iteration} iterations")
+                    print(f"Terminated after {iteration + 1} iterations")
                 return new_eigenvector
             
             eigenvector = new_eigenvector
@@ -176,6 +177,46 @@ class SecureSVD:
 
         return util.encrypt_to_ckks_mat(us_arr.T, self.encrypt_pk), util.encrypt_to_ckks_mat(vs_arr, self.encrypt_pk)
 
+# Secure clipping implementation that keeps computation completely over FHE space
+class SecureFHEClip:
+    def __init__(self, public_context: bytes, secret_context: bytes):
+        self.encrypt_sk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+
+    def sqrt(self, x: ts.CKKSVector, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Scale x to interval (0, 1) to apply Wilkes' square root algorithm
+        x *= (1 / max_val)
+
+        # Setup variables for approximation
+        a : ts.CKKSVector = x
+        b : ts.CKKSVector = x - 1
+
+        # max_iter is parameter that controls degree of approximation
+        for _ in range(0, max_iter):
+            a = a * (1 - (0.5 * b))
+            b = (b ** 2) * ((b - 3) * 0.25)
+
+        # Scale result back (note that m is plaintext so we may use the square root directly)
+        return a * math.sqrt(max_val)
+
+    def min(self, a: ts.CKKSVector, b: float, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : ts.CKKSVector = (a + b) * 0.5
+        difference : ts.CKKSVector = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average - difference
+
+    def max(self, a: ts.CKKSVector, b: float, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : ts.CKKSVector = (a + b) * 0.5
+        # Note: need to set this maximum value to the square of the original
+        difference : ts.CKKSVector = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average + difference
+
+    # Actual clipping operation (easy with min and max)
+    def clip(self, x : ts.CKKSVector, low: float, high: float, max_val : float = 8, max_iter = 4) -> float:
+        return self.min(self.max(x, low, max_val=max_val, max_iter=max_iter), high, max_val=max_val, max_iter=max_iter)
+
+# Clipping implementation that involves decrypting and re-encrypting
 class SecureClip:
     def __init__(self, public_context: bytes, secret_context: bytes):
         self.encrypt_sk = ts.context_from(public_context)
@@ -295,7 +336,7 @@ class SecureMatrixCompletion:
         val = self.X[i, :] @ self.Y[j, :].T
 
         # 0.5 <= rating <= 5
-        val = self.secure_clip_wrapper.clip(val, 0.5, 5)
+        val = self.secure_clip_wrapper.clip(val, 0, 5)
         return val
 
     def error(self):
@@ -319,7 +360,7 @@ class SecureMatrixCompletion:
 
     def compute_M_prime(self):
         M_prime = self.X @ self.Y.T
-        M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0.5, 5))(
+        M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0, 5))(
             M_prime
         )
         return M_prime
