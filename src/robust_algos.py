@@ -1,7 +1,10 @@
 # Algorithms implementing robust matrix completion (semi-random matrix completion)
 
 from typing import List
-from secure_algos import SecureMatrixCompletion, SecureMatrixErrorReset, SecureSVD, SecureClip, SecureClearDivision
+from secure_algos import SecureMatrixCompletion, SecureMatrixErrorReset, SecureSVD, SecureSVD1D, SecureClip, SecureClearDivision
+
+class SecureRobustWeights:
+    pass
 
 class RobustSecureMatrixCompletion(SecureMatrixCompletion):
     def __init__(

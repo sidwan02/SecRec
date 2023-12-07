@@ -60,14 +60,14 @@ class SecureSciPySVD:
             vT, self.encrypt_pk
         )
 
-# SVD implementation using power iteration (easier to implement in FHE world)
-class SecureSVD:
+# Wrapper implementation for eigenvalue extraction algorithm using power iteration
+class SecureSVD1D:
     def __init__(self, public_context: bytes, secret_context: bytes, debug : bool = True):
         self.encrypt_pk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
         self.debug = debug
 
-    # Helper function to generate a random unit vector (or uniform vector)
+        # Helper function to generate a random unit vector (or uniform vector)
     def random_unit_vector(self, n : int, uniform : bool = False) -> np.ndarray[float]:
         if uniform:
             x : np.array = np.ones(0, 2, n)
@@ -122,6 +122,14 @@ class SecureSVD:
             print(f"Failed to converge after {max_iter} iterations")
 
         return eigenvector
+    
+# SVD implementation using power iteration (easier to implement in FHE world)
+class SecureSVD:
+    def __init__(self, public_context: bytes, secret_context: bytes, svd_1d_wrapper = SecureSVD1D, debug : bool = True):
+        self.encrypt_pk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+        self.debug = debug
+        self.svd_1d_wrapper = svd_1d_wrapper(public_context, secret_context)
 
     # Big SVD Function
     def compute_SVD(self, A: List[List[ts.CKKSVector]], r: int = 6
@@ -145,7 +153,7 @@ class SecureSVD:
 
             # Fill u or v depending on size of matrices
             if rows > cols:
-                v = self.svd_1d(matrix_to_decompose)
+                v = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
                 # Compute singular value
                 u : List[ts.CKKSVector] = A @ v
 
@@ -160,7 +168,7 @@ class SecureSVD:
 
 
             else:
-                u = self.svd_1d(matrix_to_decompose)
+                u = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
                 # Compute singular value
                 v : np.ndarray[float] = A.T @ u
 

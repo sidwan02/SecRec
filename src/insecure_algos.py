@@ -1,11 +1,45 @@
 # Insecure algorithms used for benchmarking performance tests
 
 import numpy as np
+import math
 from scipy.sparse import linalg as slinalg
 from typing import List, tuple
 
 class InsecureClip:
-    pass
+    def __init__(self):
+        pass
+
+    def sqrt(self, x: float, max_val: float = 8, max_iter: int = 4) -> float:
+        # Scale x to interval (0, 1) to apply Wilkes' square root algorithm
+        x *= (1 / max_val)
+
+        # Setup variables for approximation
+        a : float = x
+        b : float = x - 1
+
+        # max_iter is parameter that controls degree of approximation
+        for _ in range(0, max_iter):
+            a = a * (1 - (0.5 * b))
+            b = (b ** 2) * ((b - 3) * 0.25)
+
+        # Scale result back (note that m is plaintext so we may use the square root directly)
+        return a * math.sqrt(max_val)
+
+    def min(self, a: float, b: float, max_val: float = 8, max_iter: int = 4) -> float:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : float = (a + b) * 0.5
+        difference : float = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average - difference
+
+    def max(self, a: float, b: float, max_val: float = 8, max_iter: int = 4) -> float:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : float = (a + b) * 0.5
+        difference : float = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average + difference
+
+    # Actual clipping operation (easy with min and max)
+    def clip(self, x : float, low: float, high: float, max_val : float = 8, max_iter = 4) -> float:
+        return self.min(self.max(x, low, max_val=max_val, max_iter=max_iter), high, max_val=max_val, max_iter=max_iter)
 
 class InsecureSciPySVD:
     def __init__(self):
@@ -15,7 +49,8 @@ class InsecureSciPySVD:
         U, _, vT = slinalg.svds(A, k=r)
         return np.array(U), np.array(vT)
 
-class InsecureSVD:
+# Wrapper class for the eigenvalue extraction algorithm
+class InsecureSVD1D:
     def __init__(self, debug : bool = True):
         self.debug = debug
 
@@ -29,7 +64,7 @@ class InsecureSVD:
             x : np.array = np.random.randint(0, 2, n)
         norm : float = np.linalg.norm(x)
         return x / norm
-
+    
     # Helper function to extract the largest eigenvector (and throw away the eigenvalue)
     # Note that inputted matrix is not necessarily square
     def svd_1d(self, A : np.ndarray[float], epsilon : float = 1e-1, max_iter = 100) -> np.ndarray[float]:
@@ -68,6 +103,11 @@ class InsecureSVD:
 
         return eigenvector
 
+class InsecureSVD:
+    def __init__(self, debug : bool = True, svd_1d_wrapper = InsecureSVD1D):
+        self.debug = debug
+        self.svd_1d_wrapper = svd_1d_wrapper
+
     # Big SVD Function
     def compute_SVD(self, A: np.ndarray[float], r: int = 6
     ) -> tuple[np.ndarray[float], np.ndarray[float]]:
@@ -90,14 +130,14 @@ class InsecureSVD:
 
             # Fill u or v depending on size of matrices
             if rows > cols:
-                v = self.svd_1d(matrix_to_decompose)
+                v = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
                 # Compute singular value
                 u : np.ndarray[float] = A @ v
                 singular_value : float = np.linalg.norm(u)
                 u = u / singular_value
 
             else:
-                u = self.svd_1d(matrix_to_decompose)
+                u = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
                 # Compute singular value
                 v : np.ndarray[float] = A.T @ u
                 singular_value : float = np.linalg.norm(v)
@@ -116,5 +156,95 @@ class InsecureSVD:
 
         return us_arr.T, vs_arr
 
+# Non-encrypted version of the gradient descent algorithm for computing weights
 class InsecureRobustWeights:
-    pass
+    def __init__(self, epochs : int = 10, sub_epochs : int = 5, svd_1d_wrapper = InsecureSVD1D, epsilon : float = 1e-3, alpha : float = 0.1, debug : bool = True):
+        self.debug = debug
+        self.svd_1d_wrapper = svd_1d_wrapper
+        self.alpha = alpha
+        self.epochs = epochs
+        self.sub_epochs = sub_epochs
+        self.epsilon = epsilon
+
+    def generate_block_matrices(self, B : np.ndarray[float]):
+        self.B : np.ndarray[float] = np.block([
+            [np.zeros((B.shape[0], B.shape[0])), B],
+            [B.T, np.zeros((B.shape[1], B.shape[1]))]
+        ])
+        
+        # Weights matrix to convert into block form
+        weights : np.ndarray[float] = np.random(B.shape)
+        self.W : np.ndarray[float] = np.block([
+            [np.zeros((B.shape[0], B.shape[0])), weights],
+            [weights.T, np.zeros((B.shape[1], B.shape[1]))]
+        ])
+
+        self.J = np.ndarray[float] = np.block([
+            [np.zeros((B.shape[0], B.shape[0])), np.ones(B.shape)],
+            [np.ones(B.T.shape), np.zeros((B.shape[1], B.shape[1]))]
+        ])
+
+        # In the secure version we'd need to encrypt the matrices as this point
+
+    # Computes loss of an inputted eigenvector
+    def loss(self, v : np.ndarray[float]) -> float:
+        loss : float = v.T @ self.W @ v
+        # Note: in secure version the loss should be decrypted once computed
+        return loss
+
+    # Helper function to perform a gradient descent subroutine (on individual eigenvalues)
+    def sub_gradient_descent(self, v : np.ndarray[float], curr_epoch : int):
+        # Initialize loss for determining convergence
+        old_loss = 0
+
+        for sub_epoch in range(self.sub_epochs):
+            # Compute loss
+            new_loss : float = self.loss(v)
+
+            # Compute gradient
+            gradient : np.ndarray[float] = np.outer(v, v)
+
+            # Apply gradient (with boolean mask to keep 0'd values 0)
+            if new_loss > 0:
+                self.W -= self.alpha * (gradient * self.B)
+            elif new_loss < 0:
+                self.W += self.alpha * (gradient * self.B)
+            
+            # Display loss information
+            if self.debug:
+                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {math.abs(new_loss)}")
+            
+            # Exit early if loss does not substantially change
+            if math.abs(math.abs(old_loss) - math.abs(new_loss)) < self.epsilon:
+                return new_loss
+                
+            old_loss = new_loss
+        
+        # Return the most recent loss
+        return old_loss
+
+    def compute_weights(self, B : np.ndarray[float]) -> np.ndarray[float]:
+        # Initialize weights
+        self.generate_block_matrices(B)
+        
+        # Cache the computation computing the W - J matrix (we will add it back when we need to recover the weights)
+        self.W -= self.J
+
+        # In each epoch, we extract an eigenvector and run gradient descent using it
+        old_loss = 0
+        for epoch in range(self.epochs):
+            # Extract eigenvector and run subroutine
+            v = self.svd_1d_wrapper.svd_1d(self.W)
+            new_loss = self.sub_gradient_descent(v, epoch + 1)
+
+            # Determine convergence (measures difference in loss between subsequent subgradient descent steps)
+            if math.abs(math.abs(old_loss) - math.abs(new_loss)) < self.epsilon:
+                break
+
+            old_loss = new_loss
+
+        # Retrieve weights
+        self.W += self.J
+        return self.W[0 : B.shape[0]][B.shape[0] : B.shape[0] + B.shape[1]]
+
+# TODO: Add an insecure version of matrix completion (SGD) and robust matrix completion (SGD) ???
