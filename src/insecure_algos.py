@@ -3,7 +3,7 @@
 import numpy as np
 import math
 from scipy.sparse import linalg as slinalg
-from typing import List, tuple
+from typing import List, Tuple
 
 class InsecureClip:
     def __init__(self):
@@ -158,7 +158,7 @@ class InsecureSVD:
 
 # Non-encrypted version of the gradient descent algorithm for computing weights
 class InsecureRobustWeights:
-    def __init__(self, epochs : int = 10, sub_epochs : int = 5, svd_1d_wrapper = InsecureSVD1D, epsilon : float = 1e-3, alpha : float = 0.1, debug : bool = True):
+    def __init__(self, svd_1d_wrapper : InsecureSVD1D, epochs : int = 10, sub_epochs : int = 5, epsilon : float = 1e-3, alpha : float = 0.5, debug : bool = True):
         self.debug = debug
         self.svd_1d_wrapper = svd_1d_wrapper
         self.alpha = alpha
@@ -173,13 +173,13 @@ class InsecureRobustWeights:
         ])
         
         # Weights matrix to convert into block form
-        weights : np.ndarray[float] = np.random(B.shape)
+        weights : np.ndarray[float] = np.random.rand(B.shape[0], B.shape[1]) * B
         self.W : np.ndarray[float] = np.block([
             [np.zeros((B.shape[0], B.shape[0])), weights],
             [weights.T, np.zeros((B.shape[1], B.shape[1]))]
         ])
 
-        self.J = np.ndarray[float] = np.block([
+        self.J : np.ndarray[float] = np.block([
             [np.zeros((B.shape[0], B.shape[0])), np.ones(B.shape)],
             [np.ones(B.T.shape), np.zeros((B.shape[1], B.shape[1]))]
         ])
@@ -206,16 +206,16 @@ class InsecureRobustWeights:
 
             # Apply gradient (with boolean mask to keep 0'd values 0)
             if new_loss > 0:
-                self.W -= self.alpha * (gradient * self.B)
+                self.W -= (self.alpha * gradient) * self.B
             elif new_loss < 0:
-                self.W += self.alpha * (gradient * self.B)
+                self.W += (self.alpha * gradient) * self.B
             
             # Display loss information
             if self.debug:
-                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {math.abs(new_loss)}")
+                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {abs(new_loss)}")
             
             # Exit early if loss does not substantially change
-            if math.abs(math.abs(old_loss) - math.abs(new_loss)) < self.epsilon:
+            if abs(abs(old_loss) - abs(new_loss)) < self.epsilon:
                 return new_loss
                 
             old_loss = new_loss
@@ -238,13 +238,50 @@ class InsecureRobustWeights:
             new_loss = self.sub_gradient_descent(v, epoch + 1)
 
             # Determine convergence (measures difference in loss between subsequent subgradient descent steps)
-            if math.abs(math.abs(old_loss) - math.abs(new_loss)) < self.epsilon:
+            if abs(abs(old_loss) - abs(new_loss)) < self.epsilon:
                 break
 
             old_loss = new_loss
 
         # Retrieve weights
         self.W += self.J
-        return self.W[0 : B.shape[0]][B.shape[0] : B.shape[0] + B.shape[1]]
+        print(B.shape)
+        print(self.B.shape)
+        return self.W[0 : B.shape[0], B.shape[0] : ]
+
+# TODO: Testing code for robust weight computation
+rows = np.random.randint(10, 21)
+cols = np.random.randint(10, 21)
+
+true_bool = np.zeros((rows, cols))
+
+# Add true entries
+for i in range(rows):
+    for j in range(cols):
+        if np.random.rand() < 0.2:
+            true_bool[i][j] = 1
+
+print(f"True bool matrix: {true_bool}")
+
+# Add noise
+noised_bool = np.zeros(true_bool.shape)
+for i in range(rows):
+    for j in range(cols):
+        if true_bool[i][j] == 1 or np.random.rand() < 0.1:
+            noised_bool[i][j] = 1
+
+assert not np.any((true_bool * noised_bool) - true_bool)
+
+print(f"Noised bool matrix: {noised_bool}")
+
+svd_calculator = InsecureSVD1D()
+weight_calculator = InsecureRobustWeights(svd_calculator)
+weights = weight_calculator.compute_weights(B = noised_bool)
+
+print(f"Weights shape: {weights.shape}")
+print(f"Weights: {weights}")
+
+print(f"Total error: {np.linalg.norm(weights - np.ones(weights.shape))}")
+print(f"Original error: {np.linalg.norm(true_bool - np.ones(true_bool.shape))}")
 
 # TODO: Add an insecure version of matrix completion (SGD) and robust matrix completion (SGD) ???

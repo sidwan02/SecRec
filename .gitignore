@@ -36,6 +36,7 @@ dist/
 Include/
 Lib/
 Scripts/
+pyvenv.cfg
 
 .vscode/
 SEAL-Python/
