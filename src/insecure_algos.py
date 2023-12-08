@@ -247,11 +247,11 @@ class InsecureRobustWeights:
         self.W += self.J
         print(B.shape)
         print(self.B.shape)
-        return self.W[0 : B.shape[0], B.shape[0] : ]
+        return [row[len(B) : ] for row in self.W[0 : len(B)].tolist()]
 
 # TODO: Testing code for robust weight computation
-rows = np.random.randint(10, 21)
-cols = np.random.randint(10, 21)
+rows = np.random.randint(3, 5)
+cols = np.random.randint(3, 5)
 
 true_bool = np.zeros((rows, cols))
 
@@ -278,10 +278,10 @@ svd_calculator = InsecureSVD1D()
 weight_calculator = InsecureRobustWeights(svd_calculator)
 weights = weight_calculator.compute_weights(B = noised_bool)
 
-print(f"Weights shape: {weights.shape}")
 print(f"Weights: {weights}")
+print(f"Weights shape: {len(weights)}, {len(weights[0])}")
 
-print(f"Total error: {np.linalg.norm(weights - np.ones(weights.shape))}")
+print(f"Total error: {np.linalg.norm(weights - np.ones(true_bool.shape))}")
 print(f"Original error: {np.linalg.norm(true_bool - np.ones(true_bool.shape))}")
 
 # TODO: Add an insecure version of matrix completion (SGD) and robust matrix completion (SGD) ???

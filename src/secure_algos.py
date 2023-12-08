@@ -142,7 +142,7 @@ class SecureSVD:
             r = dim
         
         # Set up a matrix to decompose (we will remove components of eigenvectors from it)
-        matrix_to_decompose : List[ts.CKKSVector] = np.copy(A)
+        matrix_to_decompose : List[List[ts.CKKSVector]] = np.copy(A)
 
         # Lists to hold our decomposed values
         vs : List[np.ndarray[float]] = []
