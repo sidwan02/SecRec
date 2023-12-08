@@ -247,6 +247,144 @@ class InsecureRobustWeights:
         self.W += self.J
         print(B.shape)
         print(self.B.shape)
-        return [row[len(B) : ] for row in self.W[0 : len(B)].tolist()]
+        return self.W[0 : B.shape[0], B.shape[0] : ]
 
-# TODO: Add an insecure version of matrix completion (SGD) and robust matrix completion (SGD) ???
+# Insecure version of the matrix completion task (used in benchmarking for robust algos)
+class InsecureMatrixCompletion:
+    def __init__(
+        self,
+        r: int,
+        epochs: int,
+        alpha: float,
+        insecure_svd_wrapper: InsecureSVD
+    ):
+        # rank / no.of features
+        self.r = r
+
+        # iterations of SGD
+        self.epochs = epochs
+
+        # lr
+        self.alpha: alpha
+
+        # proportion of entries contributing to validation instead of training
+        self.val_prop = 0.1
+
+        # Insecure SVD wrapper
+        self.insecure_svd_wrapper = insecure_svd_wrapper
+
+    def prepare_data(
+        self,
+        ratings_mat: np.ndarray[float],
+        is_filled_mat: np.ndarray[float],
+    ):
+        # m movies (cols), n users (rows)
+        self.n, self.m = ratings_mat.shape[0], ratings_mat.shape[1]
+
+        self.num_train_values: int = 0
+
+        self.ratings_mat = ratings_mat
+        self.is_filled_mat = is_filled_mat
+
+        self.indices_mat = np.empty(self.ratings_mat.shape, dtype=object)
+        for r in range(self.n):
+            for c in range(self.m):
+                self.indices_mat[r][c] = (r, c)
+                self.num_train_values += self.is_filled_mat[r][c]
+
+        U, vT = self.insecure_svd_wrapper.compute_SVD(self.ratings_mat, self.r)
+
+        self.X = U
+        self.Y = np.transpose(vT)
+
+        assert self.X.shape == (self.n, self.r)
+        assert self.Y.shape == (self.m, self.r)
+
+    def shuffle_data(self):
+        assert self.ratings_mat.shape == self.is_filled_mat.shape
+
+        ratings_flat = np.array(self.ratings_mat).flatten()
+        filled_flat = np.array(self.is_filled_mat).flatten()
+        indices_flat = self.indices_mat.flatten()
+
+        perm = np.random.permutation(len(ratings_flat))
+
+        self.shuffled_rankings = ratings_flat[perm]
+        self.shuffled_filled = filled_flat[perm]
+        self.shuffled_indices = indices_flat[perm]
+
+    def train(self):
+        for cur_i in range(1, self.epochs + 1):
+            # shuffle the train data
+            self.shuffle_data()
+            self.sgd()
+            # err_val is unused since it is 0 right now
+            err_train, err_val = self.error()
+
+            print(f"Iteration {cur_i}, Train loss: {round(err_train, 4)}")
+
+        return self.compute_M_prime()
+
+    def sgd(self):
+        for s_no, (M_i_j, (i, j), is_filled) in enumerate(
+            zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
+        ):
+            # there is no update to M if the value is not filled
+            e_i_j = (M_i_j - self.pred_rating(i, j)) * is_filled
+
+            for c in range(self.r):
+                self.X[i, c] += self.alpha * 2 * e_i_j * self.Y[j, c]
+                self.Y[j, c] += self.alpha * 2 * e_i_j * self.X[i, c]
+
+    def pred_rating(self, i, j) -> float:
+        val = self.X[i, :] @ self.Y[j, :].T
+
+        # 0.5 <= rating <= 5
+        val = np.clip(val, 0, 5)
+        return val
+
+    def error(self):
+        error_train = 0
+        error_val = 0
+        M_prime = self.compute_M_prime()
+
+        # Computing the MSE loss
+        for s_no, (M_i_j, (i, j), is_filled) in enumerate(
+            zip(self.shuffled_rankings, self.shuffled_indices, self.shuffled_filled)
+        ):
+            # ideally we want to maintain a train test split.
+            error_train += (M_i_j - M_prime[i, j]) * (M_i_j - M_prime[i, j]) * is_filled
+
+        return (
+            error_train / self.num_train_values,
+            0,
+        )
+
+    def compute_M_prime(self):
+        M_prime = self.X @ self.Y.T
+        M_prime = np.clip(M_prime, 0, 5)
+        return M_prime
+
+# Insecure implementation of robust matrix completion (for use in benchmarking performance)
+class RobustInsecureMatrixCompletion(InsecureMatrixCompletion):
+    def __init__(
+        self,
+        r: int,
+        epochs: int,
+        alpha: float,
+        public_context: bytes,
+        insecure_svd_wrapper: InsecureSVD,
+        insecure_robust_weights_wrapper : InsecureRobustWeights
+    ):
+        super().__init__(r, epochs, alpha, public_context, insecure_svd_wrapper)
+        self.insecure_robust_weights_wrapper = insecure_robust_weights_wrapper
+
+    # Overwritten method to induce pre-processing weight computation
+    def prepare_data(
+        self,
+        ratings_mat: np.ndarray[float],
+        is_filled_mat: np.ndarray[float],
+    ):
+        # Only change in robust case is doing weight pre-processing on revealed entries
+        self.weights_mat : np.ndarray[float] = self.insecure_robust_weights_wrapper.compute_weights(is_filled_mat)
+        super().prepare_data(ratings_mat, self.weights_mat)

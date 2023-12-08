@@ -8,7 +8,7 @@ from typing import List
 from secure_algos import SecureMatrixCompletion, SecureMatrixErrorReset, SecureSVD, SecureSVD1D, SecureClip, SecureClearDivision
 
 class SecureRobustWeights:
-    def __init__(self, public_context: bytes, secret_context: bytes, svd_1d_wrapper : SecureSVD1D, epochs : int = 10, sub_epochs : int = 5, epsilon : float = 1e-3, alpha : float = 0.5, debug : bool = True):
+    def __init__(self, public_context: bytes, secret_context: bytes, svd_1d_wrapper : SecureSVD1D, epochs : int = 10, sub_epochs : int = 5, epsilon : float = 1e-3, alpha : float = 1, debug : bool = True):
         self.encrypt_pk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
         self.debug = debug
@@ -50,6 +50,7 @@ class SecureRobustWeights:
         
         return new_mat
 
+    # Helper function to ensure GD algorithm we run operates on square matrices
     def generate_block_matrices(self, B : List[List[bytes]]):
         b_rows : int = len(B)
         b_cols : int = len(B[0])
