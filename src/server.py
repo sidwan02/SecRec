@@ -1,9 +1,11 @@
 import secure_algos
+import robust_algos
 import tenseal as ts
 from typing import Tuple, List
 
 
 class Server:
+    # NOTE: Added default arguments to make server non-robust by default (enabling robustness can be done later)
     def __init__(
         self,
         public_context: bytes,
@@ -11,6 +13,8 @@ class Server:
         secure_svd_wrapper: secure_algos.SecureSVD,
         secure_clip_wrapper: secure_algos.SecureClip,
         secure_division_wrapper: secure_algos.SecureClearDivision,
+        secure_robust_weight_wrapper : robust_algos.SecureRobustWeights = None,
+        make_robust : bool = False
     ):
         self.storage = {}
 
@@ -37,16 +41,32 @@ class Server:
         self.encrypt_pk = ts.context_from(public_context)
         self.zero_bytes = ts.ckks_vector(self.encrypt_pk, [0]).serialize()
 
-        self.secure_matrix_completion_wrapper = secure_algos.SecureMatrixCompletion(
-            1,
-            20,
-            1e-2,
-            public_context,
-            secure_matrix_error_reset_wrapper,
-            secure_svd_wrapper,
-            secure_clip_wrapper,
-            secure_division_wrapper,
-        )
+        # Make robust server construction if appropriate params passed in
+        if make_robust and secure_robust_weight_wrapper is not None:
+            self.secure_matrix_completion_wrapper = robust_algos.RobustSecureMatrixCompletion(
+                1,
+                20,
+                1e-2,
+                public_context,
+                secure_matrix_error_reset_wrapper,
+                secure_svd_wrapper,
+                secure_clip_wrapper,
+                secure_division_wrapper,
+                secure_robust_weight_wrapper
+            )
+        
+        # Default case: non-robust
+        else:
+            self.secure_matrix_completion_wrapper = secure_algos.SecureMatrixCompletion(
+                1,
+                20,
+                1e-2,
+                public_context,
+                secure_matrix_error_reset_wrapper,
+                secure_svd_wrapper,
+                secure_clip_wrapper,
+                secure_division_wrapper,
+            )
 
     # adds a new col
     def add_movie(self):
