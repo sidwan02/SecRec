@@ -4,6 +4,7 @@ from support import crypto, util
 import tenseal as ts
 from typing import List, Tuple
 import time
+import math
 
 
 # Eventually, these wrapper classes (division, error reset, svd, clip) can have a privacy budget preventing the server from calling them for nefarious purposes (within reasonable estimates).
@@ -21,7 +22,16 @@ class SecureClearDivision:
         ans = x_plain / y_plain
 
         return ans
-
+    
+# Wrapper class for normalizing a vector and decrypting it
+class SecureClearNormalize:
+    def __init__(self, secret_context: bytes):
+        self.decrypt_sk = ts.context_from(secret_context)
+    
+    def normalize(self, x : List[ts.CKKSVector]) -> np.ndarray[float]:
+        plaintext_vec : np.ndarray[float] = np.ndarray(util.decrypt_ckks_vec(x))
+        plaintext_norm : float = np.linalg.norm(plaintext_vec)
+        return plaintext_vec / plaintext_norm
 
 class SecureMatrixErrorReset:
     def __init__(self, public_context, secret_context):
@@ -32,8 +42,8 @@ class SecureMatrixErrorReset:
         decrypted_M = util.decrypt_ckks_mat(M, self.decrypt_sk)
         return util.encrypt_to_ckks_mat(decrypted_M, self.encrypt_pk)
 
-
-class SecureSVD:
+# SVD implementation from SciPy (cannot be performed on server)
+class SecureSciPySVD:
     def __init__(self, public_context: bytes, secret_context: bytes):
         self.encrypt_pk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
@@ -43,13 +53,187 @@ class SecureSVD:
     ) -> Tuple[List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]]:
         ratings_mat = util.decrypt_ckks_mat(A, self.decrypt_sk)
 
+        # This operation cannot be performed on the server
         U, _, vT = slinalg.svds(ratings_mat, k=r)
 
         return util.encrypt_to_ckks_mat(U, self.encrypt_pk), util.encrypt_to_ckks_mat(
             vT, self.encrypt_pk
         )
 
+# Wrapper implementation for eigenvalue extraction algorithm using power iteration
+class SecureSVD1D:
+    def __init__(self, public_context: bytes, secret_context: bytes, debug : bool = True):
+        self.encrypt_pk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+        self.debug = debug
 
+        # Helper function to generate a random unit vector (or uniform vector)
+    def random_unit_vector(self, n : int, uniform : bool = False) -> np.ndarray[float]:
+        if uniform:
+            x : np.array = np.ones(0, 2, n)
+            # Ensure we have at least one nonzero value
+            x[np.random.randint(0, n)] = 1
+        else:
+            x : np.array = np.random.randint(0, 2, n)
+        norm : float = np.linalg.norm(x)
+        return x / norm
+
+    # Helper function to extract the largest eigenvector (and throw away the eigenvalue)
+    # Note that inputted matrix is not necessarily square
+    def svd_1d(self, A : List[List[ts.CKKSVector]], epsilon : float = 1e-1, max_iter = 100) -> np.ndarray[float]:
+        rows : int = len(A)
+        cols : int = len(A[0])
+        dim : int = min(rows, cols)
+
+        # Initialize starting values for iteration
+        eigenvector : np.ndarray[float] = self.random_unit_vector(dim)
+
+        # We need to do this multiplication to guarentee we have a square matrix
+        if rows > cols:
+            B : List[List[ts.CKKSVector]] = A.T @ A
+        elif rows < cols:
+            B : List[List[ts.CKKSVector]] = A @ A.T
+        else:
+            B : List[List[ts.CKKSVector]] = A
+
+         # Cap iterations at max_iter (can use this to empirically determine good iteration numbers)
+        for iteration in range(max_iter):
+            new_eigenvector : List[ts.CKKSVector] = B @ eigenvector
+
+            # === Begin Client-side Operations === #
+
+            # Decrypt and normalize the eigenvector
+            new_eigenvector = np.array(util.decrypt_ckks_vec(new_eigenvector, self.decrypt_sk))
+            new_eigenvector_norm = np.linalg.norm(new_eigenvector)
+            new_eigenvector = new_eigenvector / new_eigenvector_norm
+
+            # === End Client-side Operations === #
+
+            # Termination condition, our eigenvalues did not significantly change
+            if abs(np.dot(eigenvector, new_eigenvector)) > 1 - epsilon:
+                if self.debug:
+                    print(f"Terminated after {iteration + 1} iterations")
+                return new_eigenvector
+            
+            eigenvector = new_eigenvector
+    
+        # If no termination was reached, return our best guess
+        if self.debug:
+            print(f"Failed to converge after {max_iter} iterations")
+
+        return eigenvector
+    
+# SVD implementation using power iteration (easier to implement in FHE world)
+class SecureSVD:
+    def __init__(self, public_context: bytes, secret_context: bytes, svd_1d_wrapper = SecureSVD1D, debug : bool = True):
+        self.encrypt_pk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+        self.debug = debug
+        self.svd_1d_wrapper = svd_1d_wrapper(public_context, secret_context)
+
+    # Big SVD Function
+    def compute_SVD(self, A: List[List[ts.CKKSVector]], r: int = 6
+    ) -> Tuple[List[List[ts.CKKSVector]], List[List[ts.CKKSVector]]]:
+        # Only extract first r singular values unless input is set to -1 (in that case extract as many as possible)
+        rows : int = len(A)
+        cols : int = len(A[0])
+        dim : int = min(rows, cols)
+        if r == -1 or r > dim:
+            r = dim
+        
+        # Set up a matrix to decompose (we will remove components of eigenvectors from it)
+        matrix_to_decompose : List[List[ts.CKKSVector]] = np.copy(A)
+
+        # Lists to hold our decomposed values
+        vs : List[np.ndarray[float]] = []
+        us : List[np.ndarray[float]] = []
+
+        # Extract the first r singular values one at a time (looping through the svd_1d subroutine)
+        for __ in range(r):
+
+            # Fill u or v depending on size of matrices
+            if rows > cols:
+                v = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
+                # Compute singular value
+                u : List[ts.CKKSVector] = A @ v
+
+                # === Begin Client-side Operations === #
+
+                # Decrypt and normalize other eigenvector
+                u = np.array(util.decrypt_ckks_vec(u, self.decrypt_sk))
+                singular_value : float = np.linalg.norm(u)
+                u = u / singular_value
+
+                # === End Client-side Operations === #
+
+
+            else:
+                u = self.svd_1d_wrapper.svd_1d(matrix_to_decompose)
+                # Compute singular value
+                v : np.ndarray[float] = A.T @ u
+
+                # === Begin Client-side Operations === #
+
+                # Decrypt and normalize other eigenvector
+                v = np.array(util.decrypt_ckks_vec(v, self.decrypt_sk))
+                singular_value : float = np.linalg.norm(v)
+                v = v / singular_value
+
+                # === End Client-side Operations === #
+            
+            # Update our eigenvectors
+            us.append(u)
+            vs.append(v)
+
+            # Update matrix by removing values that correspond to old singular values
+            matrix_to_decompose -= singular_value * np.outer(u, v)
+        
+        # Compile all the values into an array
+        us_arr : np.ndarray[float] = np.array(us)
+        vs_arr : np.ndarray[float] = np.array(vs)
+
+        return util.encrypt_to_ckks_mat(us_arr.T, self.encrypt_pk), util.encrypt_to_ckks_mat(vs_arr, self.encrypt_pk)
+
+# Secure clipping implementation that keeps computation completely over FHE space
+class SecureFHEClip:
+    def __init__(self, public_context: bytes, secret_context: bytes):
+        self.encrypt_sk = ts.context_from(public_context)
+        self.decrypt_sk = ts.context_from(secret_context)
+
+    def sqrt(self, x: ts.CKKSVector, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Scale x to interval (0, 1) to apply Wilkes' square root algorithm
+        x *= (1 / max_val)
+
+        # Setup variables for approximation
+        a : ts.CKKSVector = x
+        b : ts.CKKSVector = x - 1
+
+        # max_iter is parameter that controls degree of approximation
+        for _ in range(0, max_iter):
+            a = a * (1 - (0.5 * b))
+            b = (b ** 2) * ((b - 3) * 0.25)
+
+        # Scale result back (note that m is plaintext so we may use the square root directly)
+        return a * math.sqrt(max_val)
+
+    def min(self, a: ts.CKKSVector, b: float, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : ts.CKKSVector = (a + b) * 0.5
+        difference : ts.CKKSVector = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average - difference
+
+    def max(self, a: ts.CKKSVector, b: float, max_val: float = 8, max_iter: int = 4) -> ts.CKKSVector:
+        # Uses fact that max of number is equal to average + half norm of difference
+        average : ts.CKKSVector = (a + b) * 0.5
+        # Note: need to set this maximum value to the square of the original
+        difference : ts.CKKSVector = self.sqrt((a - b) ** 2, max_val=max_val ** 2, max_iter=max_iter) * 0.5
+        return average + difference
+
+    # Actual clipping operation (easy with min and max)
+    def clip(self, x : ts.CKKSVector, low: float, high: float, max_val : float = 8, max_iter = 4) -> float:
+        return self.min(self.max(x, low, max_val=max_val, max_iter=max_iter), high, max_val=max_val, max_iter=max_iter)
+
+# Clipping implementation that involves decrypting and re-encrypting
 class SecureClip:
     def __init__(self, public_context: bytes, secret_context: bytes):
         self.encrypt_sk = ts.context_from(public_context)
@@ -169,7 +353,7 @@ class SecureMatrixCompletion:
         val = self.X[i, :] @ self.Y[j, :].T
 
         # 0.5 <= rating <= 5
-        val = self.secure_clip_wrapper.clip(val, 0.5, 5)
+        val = self.secure_clip_wrapper.clip(val, 0, 5)
         return val
 
     def error(self):
@@ -193,7 +377,7 @@ class SecureMatrixCompletion:
 
     def compute_M_prime(self):
         M_prime = self.X @ self.Y.T
-        M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0.5, 5))(
+        M_prime = np.vectorize(lambda x: self.secure_clip_wrapper.clip(x, 0, 5))(
             M_prime
         )
         return M_prime

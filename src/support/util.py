@@ -196,6 +196,18 @@ def decrypt_ckks_mat(
 
     return plaintext_mat
 
+def decrypt_ckks_vec(
+    A: List[ts.CKKSVector], decrypt_sk: ts.Context
+) -> List[float]:
+    plaintext_vec = np.empty((len(A)), dtype=float)
+
+    for i in range(len(A)):
+        m = A[i]
+        m.link_context(decrypt_sk)
+        plaintext_vec[i] = round(m.decrypt()[0], 4)
+
+    return plaintext_vec
+
 
 def encrypt_to_ckks_mat(
     A: List[List[float]], encrypt_pk: ts.Context

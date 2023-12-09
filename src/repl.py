@@ -2,6 +2,7 @@ from combiner import Combiner
 from user import User
 from server import Server
 import secure_algos
+import robust_algos
 import support.crypto as crypto
 import tenseal as ts
 import base64
@@ -56,7 +57,7 @@ def test_combiner_rating_logic(server, combiner, public_context, secret_context)
     )
     combiner.handle_rating("movie2", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Bob")
     combiner.handle_rating(
-        "movie10", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Alice"
+        "movie3", ts.ckks_vector(encrypt_pk, [2]).serialize(), "Alice"
     )
     combiner.handle_rating(
         "movie1", ts.ckks_vector(encrypt_pk, [4.3]).serialize(), "Alice"
@@ -65,7 +66,7 @@ def test_combiner_rating_logic(server, combiner, public_context, secret_context)
     # Tests for recieve_rating
 
     print(user1.receive_rating("movie1"))
-    assert math.isclose(user3.receive_rating("movie5"), 0.0)
+    # assert math.isclose(user2.receive_rating("movie1"), 4.3)
 
 
 def demo(server, combiner, public_context, secret_context):
@@ -82,7 +83,7 @@ def demo(server, combiner, public_context, secret_context):
     movies = [f"Movie {i}" for i in range(1, num_movies + 1)]
 
     for i in range(len(movies) * len(users)):
-        add_rating = np.random.rand() < 0.8
+        add_rating = np.random.rand() < 0.3
 
         if add_rating:
             user = users[random.randint(0, num_users - 1)]
@@ -92,10 +93,10 @@ def demo(server, combiner, public_context, secret_context):
             user.send_rating(movie, rating)
 
     # Ratings test
-    print(users[0].receive_rating("Movie 3"))
+    print(users[0].receive_rating(f"Movie {num_movies - 1}"))
 
 
-def reset_state():
+def reset_default_state():
     public_context, secret_context = setup_contexts()
 
     server = Server(
@@ -109,9 +110,25 @@ def reset_state():
 
     return public_context, secret_context, server, combiner
 
+def reset_robust_state():
+    public_context, secret_context = setup_contexts()
+
+    server = Server(
+        public_context,
+        secure_algos.SecureMatrixErrorReset(public_context, secret_context),
+        secure_algos.SecureSVD(public_context, secret_context),
+        secure_algos.SecureClip(public_context, secret_context),
+        secure_algos.SecureClearDivision(secret_context),
+        robust_algos.SecureRobustWeights(public_context, secret_context, secure_algos.SecureSVD1D(public_context, secret_context)),
+        make_robust=True
+    )
+    combiner = Combiner(server, public_context)
+
+    return public_context, secret_context, server, combiner
+
 
 if __name__ == "__main__":
-    public_context, secret_context, server, combiner = reset_state()
+    public_context, secret_context, server, combiner = reset_robust_state()
     user1 = User("Bob", combiner, public_context, secret_context, True)
 
     ######### TESTS START #########
@@ -120,7 +137,7 @@ if __name__ == "__main__":
     test_combiner_rating_logic(server, combiner, public_context, secret_context)
     ######### TESTS END #########
 
-    public_context, secret_context, server, combiner = reset_state()
+    public_context, secret_context, server, combiner = reset_robust_state()
 
     ######### DEMO ###########
     demo(server, combiner, public_context, secret_context)

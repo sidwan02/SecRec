@@ -32,6 +32,12 @@ dist/
 # Mac
 .DS_Store
 
+# Windows venv
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+
 .vscode/
 SEAL-Python/
 Pyfhel/
