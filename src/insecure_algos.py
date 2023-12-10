@@ -256,7 +256,8 @@ class InsecureMatrixCompletion:
         r: int,
         epochs: int,
         alpha: float,
-        insecure_svd_wrapper: InsecureSVD
+        insecure_svd_wrapper: InsecureSVD,
+        loss_list = None
     ):
         # rank / no.of features
         self.r = r
@@ -272,6 +273,9 @@ class InsecureMatrixCompletion:
 
         # Insecure SVD wrapper
         self.insecure_svd_wrapper = insecure_svd_wrapper
+
+        # List to accumulate losses
+        self.loss_list = loss_list
 
     def prepare_data(
         self,
@@ -320,8 +324,11 @@ class InsecureMatrixCompletion:
             self.sgd()
             # err_val is unused since it is 0 right now
             err_train, err_val = self.error()
-
             print(f"Iteration {cur_i}, Train loss: {round(err_train, 4)}")
+
+            # Accumulate losses for loss convergence testing
+            if self.loss_list is not None:
+                self.loss_list.append(round(err_train, 4))
 
         return self.compute_M_prime()
 
@@ -373,9 +380,10 @@ class RobustInsecureMatrixCompletion(InsecureMatrixCompletion):
         epochs: int,
         alpha: float,
         insecure_svd_wrapper: InsecureSVD,
-        insecure_robust_weights_wrapper : InsecureRobustWeights
+        insecure_robust_weights_wrapper : InsecureRobustWeights,
+        loss_list = None
     ):
-        super().__init__(r, epochs, alpha, insecure_svd_wrapper)
+        super().__init__(r, epochs, alpha, insecure_svd_wrapper, loss_list)
         self.insecure_robust_weights_wrapper = insecure_robust_weights_wrapper
 
     # Overwritten method to induce pre-processing weight computation

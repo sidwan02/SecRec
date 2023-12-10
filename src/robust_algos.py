@@ -143,9 +143,10 @@ class RobustSecureMatrixCompletion(SecureMatrixCompletion):
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
         secure_division_wrapper: SecureClearDivision,
-        secure_robust_weights_wrapper : SecureRobustWeights
+        secure_robust_weights_wrapper : SecureRobustWeights,
+        loss_list = None
     ):
-        super().__init__(r, epochs, alpha, public_context, secure_matrix_error_reset_wrapper, secure_svd_wrapper, secure_clip_wrapper, secure_division_wrapper)
+        super().__init__(r, epochs, alpha, public_context, secure_matrix_error_reset_wrapper, secure_svd_wrapper, secure_clip_wrapper, secure_division_wrapper, loss_list)
         self.secure_robust_weights_wrapper = secure_robust_weights_wrapper
 
     # Overwritten method to induce pre-processing weight computation

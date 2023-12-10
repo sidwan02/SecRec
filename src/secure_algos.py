@@ -129,7 +129,7 @@ class SecureSVD:
         self.encrypt_pk = ts.context_from(public_context)
         self.decrypt_sk = ts.context_from(secret_context)
         self.debug = debug
-        self.svd_1d_wrapper = svd_1d_wrapper(public_context, secret_context)
+        self.svd_1d_wrapper = svd_1d_wrapper(public_context, secret_context, debug=debug)
 
     # Big SVD Function
     def compute_SVD(self, A: List[List[ts.CKKSVector]], r: int = 6
@@ -259,6 +259,7 @@ class SecureMatrixCompletion:
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
         secure_division_wrapper: SecureClearDivision,
+        loss_list = None
     ):
         self.encrypt_pk = ts.context_from(public_context)
 
@@ -273,6 +274,8 @@ class SecureMatrixCompletion:
 
         # proportion of entries contributing to validation instead of training
         self.val_prop = 0.1
+
+        self.loss_list = loss_list
 
         self.secure_matrix_error_reset_wrapper = secure_matrix_error_reset_wrapper
         self.secure_clip_wrapper = secure_clip_wrapper
@@ -331,6 +334,10 @@ class SecureMatrixCompletion:
             err_train, err_val = self.error()
 
             print(f"Iteration {cur_i}, Train loss: {round(err_train, 4)}")
+            
+            # Accumulate losses for loss convergence testing
+            if self.loss_list is not None:
+                self.loss_list.append(round(err_train, 4))
 
         return util.convert_ckks_mat_to_bytes_mat(self.compute_M_prime())
 
