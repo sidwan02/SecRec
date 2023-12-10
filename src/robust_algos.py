@@ -96,7 +96,7 @@ class SecureRobustWeights:
             
             # Display loss information
             if self.debug:
-                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {abs(new_loss)}")
+                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {new_loss}")
             
             # Exit early if loss does not substantially change
             if abs(abs(old_loss) - abs(new_loss)) < self.epsilon:
@@ -143,9 +143,10 @@ class RobustSecureMatrixCompletion(SecureMatrixCompletion):
         secure_svd_wrapper: SecureSVD,
         secure_clip_wrapper: SecureClip,
         secure_division_wrapper: SecureClearDivision,
-        secure_robust_weights_wrapper : SecureRobustWeights
+        secure_robust_weights_wrapper : SecureRobustWeights,
+        loss_list = None
     ):
-        super().__init__(r, epochs, alpha, public_context, secure_matrix_error_reset_wrapper, secure_svd_wrapper, secure_clip_wrapper, secure_division_wrapper)
+        super().__init__(r, epochs, alpha, public_context, secure_matrix_error_reset_wrapper, secure_svd_wrapper, secure_clip_wrapper, secure_division_wrapper, loss_list)
         self.secure_robust_weights_wrapper = secure_robust_weights_wrapper
 
     # Overwritten method to induce pre-processing weight computation
