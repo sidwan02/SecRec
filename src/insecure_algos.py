@@ -45,7 +45,7 @@ class InsecureSciPySVD:
     def __init__(self):
         pass
 
-    def compute_SVD(self, A: np.ndarray[float], r: int = 6) -> tuple[np.ndarray[float], np.ndarray[float]]:
+    def compute_SVD(self, A: np.ndarray[float], r: int = 6) -> Tuple[np.ndarray[float], np.ndarray[float]]:
         U, _, vT = slinalg.svds(A, k=r)
         return np.array(U), np.array(vT)
 
@@ -110,7 +110,7 @@ class InsecureSVD:
 
     # Big SVD Function
     def compute_SVD(self, A: np.ndarray[float], r: int = 6
-    ) -> tuple[np.ndarray[float], np.ndarray[float]]:
+    ) -> Tuple[np.ndarray[float], np.ndarray[float]]:
         # Only extract first r singular values unless input is set to -1 (in that case extract as many as possible)
         rows : int = A.shape[0]
         cols : int = A.shape[1]
@@ -158,7 +158,7 @@ class InsecureSVD:
 
 # Non-encrypted version of the gradient descent algorithm for computing weights
 class InsecureRobustWeights:
-    def __init__(self, svd_1d_wrapper : InsecureSVD1D, epochs : int = 10, sub_epochs : int = 5, epsilon : float = 1e-3, alpha : float = 0.5, debug : bool = True):
+    def __init__(self, svd_1d_wrapper : InsecureSVD1D, epochs : int = 10, sub_epochs : int = 5, epsilon : float = 1e-3, alpha : float = 1, debug : bool = True):
         self.debug = debug
         self.svd_1d_wrapper = svd_1d_wrapper
         self.alpha = alpha
@@ -212,7 +212,7 @@ class InsecureRobustWeights:
             
             # Display loss information
             if self.debug:
-                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {abs(new_loss)}")
+                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {new_loss}")
             
             # Exit early if loss does not substantially change
             if abs(abs(old_loss) - abs(new_loss)) < self.epsilon:
@@ -372,11 +372,10 @@ class RobustInsecureMatrixCompletion(InsecureMatrixCompletion):
         r: int,
         epochs: int,
         alpha: float,
-        public_context: bytes,
         insecure_svd_wrapper: InsecureSVD,
         insecure_robust_weights_wrapper : InsecureRobustWeights
     ):
-        super().__init__(r, epochs, alpha, public_context, insecure_svd_wrapper)
+        super().__init__(r, epochs, alpha, insecure_svd_wrapper)
         self.insecure_robust_weights_wrapper = insecure_robust_weights_wrapper
 
     # Overwritten method to induce pre-processing weight computation

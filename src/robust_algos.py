@@ -96,7 +96,7 @@ class SecureRobustWeights:
             
             # Display loss information
             if self.debug:
-                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {abs(new_loss)}")
+                print(f"Iteration {curr_epoch}.{sub_epoch + 1}, Train loss: {new_loss}")
             
             # Exit early if loss does not substantially change
             if abs(abs(old_loss) - abs(new_loss)) < self.epsilon:
