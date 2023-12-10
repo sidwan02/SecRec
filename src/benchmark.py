@@ -721,4 +721,3 @@ def secure_robust_matrix_completion_loss_convergence_benchmark(epsilon : float =
     robust_complete_matrix = robust_completer.train()
 
     return true_losses, robust_losses
-

@@ -45,7 +45,7 @@ class InsecureSciPySVD:
     def __init__(self):
         pass
 
-    def compute_SVD(self, A: np.ndarray[float], r: int = 6) -> Tuple[np.ndarray[float], np.ndarray[float]]:
+    def compute_SVD(self, A: np.ndarray[float], r: int = 6) -> Tuple[np.ndarray, np.ndarray[float]]:
         U, _, vT = slinalg.svds(A, k=r)
         return np.array(U), np.array(vT)
 
