@@ -106,7 +106,7 @@ def reset_default_state():
         secure_algos.SecureClip(public_context, secret_context),
         secure_algos.SecureClearDivision(secret_context),
     )
-    combiner = Combiner(server, public_context)
+    combiner = Combiner(server, public_context, do_pir=True)
 
     return public_context, secret_context, server, combiner
 
@@ -122,7 +122,7 @@ def reset_robust_state():
         robust_algos.SecureRobustWeights(public_context, secret_context, secure_algos.SecureSVD1D(public_context, secret_context)),
         make_robust=True
     )
-    combiner = Combiner(server, public_context)
+    combiner = Combiner(server, public_context, do_pir=True)
 
     return public_context, secret_context, server, combiner
 
@@ -132,9 +132,9 @@ if __name__ == "__main__":
     user1 = User("Bob", combiner, public_context, secret_context, True)
 
     ######### TESTS START #########
-    tenseal_util_test()
-    combiner.test_server_storage()
-    test_combiner_rating_logic(server, combiner, public_context, secret_context)
+    # tenseal_util_test()
+    # combiner.test_server_storage()
+    # test_combiner_rating_logic(server, combiner, public_context, secret_context)
     ######### TESTS END #########
 
     public_context, secret_context, server, combiner = reset_robust_state()

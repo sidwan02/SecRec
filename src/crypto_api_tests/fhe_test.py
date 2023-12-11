@@ -163,3 +163,5 @@ for i in range(100):
 
 ans.link_context(secret_key)
 print(ans.decrypt())
+
+print(type(enc_one))

@@ -125,7 +125,7 @@ class Server:
         )
         return self.secure_matrix_completion_wrapper.train()
 
-    def receive_rating(self, r: int, c: int, demo) -> bytes:
+    def receive_rating(self, r: int, c: int, demo: bool) -> bytes:
         predicated_ratings = self.matrix_completion()
 
         if demo:
@@ -134,3 +134,18 @@ class Server:
             self.matrices["predicted"] = [[]]
 
         return predicated_ratings[r][c]
+
+    def receive_rating_pir(
+        self, 
+        r: ts.tensors.ckksvector.CKKSVector, 
+        c: ts.tensors.ckksvector.CKKSVector, 
+        demo: bool
+    ) -> bytes:
+        predicated_ratings = self.matrix_completion()
+
+        if demo:
+            self.matrices["predicted"] = predicated_ratings
+        else:
+            self.matrices["predicted"] = [[]]
+
+        return predicated_ratings.matmul(c).dot(r)[0]
