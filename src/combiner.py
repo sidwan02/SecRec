@@ -15,10 +15,16 @@ class KeyDB:
 
 
 class Combiner:
-    def __init__(self, server: Server, public_context: bytes):
+    def __init__(
+        self, 
+        server: Server, 
+        public_context: bytes,
+        do_pir : bool = False
+    ):
         self.server = server
         self.keyDB = KeyDB()
         self.encrypt_pk = ts.context_from(public_context)
+        self.do_pir = do_pir
 
         # {user: row_id}
         self.setup_server_storage({}, "user-ownership")
@@ -149,11 +155,23 @@ class Combiner:
             print("Invalid user or movie!")
             return None
 
-        rating_bytes = self.server.receive_rating(
-            user_ownership_map[user], movie_ownership_map[movie], demo
-        )
+        if self.do_pir:
+            user_one_hot = [1 if curr_user == user else 0 for curr_user, _ in user_ownership_map.items()]
+            user_one_hot_encrypted = ts.ckks_vector(self.encrypt_pk, user_one_hot)
+            movie_one_hot = [1 if curr_movie == movie else 0 for curr_movie, _ in movie_ownership_map.items()]
+            movie_one_hot_encrypted = ts.ckks_vector(self.encrypt_pk, movie_one_hot)
 
-        return rating_bytes
+            rating_bytes = self.server.receive_rating_pir(
+                user_one_hot_encrypted, movie_one_hot_encrypted, demo
+            )
+
+            return rating_bytes
+        else:
+            rating_bytes = self.server.receive_rating(
+                user_ownership_map[user], movie_ownership_map[movie], demo
+            )
+
+            return rating_bytes
 
     def test_server_storage(self):
         a = {"hi": 1}
