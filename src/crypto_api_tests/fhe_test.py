@@ -133,6 +133,7 @@ c = a @ b
 val = c[0, 0]
 val.link_context(secret_key)
 print(round(val.decrypt()[0], 4))
+print(type(val))
 
 end = time.time()
 
@@ -163,3 +164,74 @@ for i in range(100):
 
 ans.link_context(secret_key)
 print(ans.decrypt())
+
+print(type(enc_one))
+
+# Testing matrix multiplication and dot product
+one_hot_encrypted = np.array([
+    ts.ckks_vector(public_key, np.array([0])),
+    ts.ckks_vector(public_key, np.array([1])),
+    ts.ckks_vector(public_key, np.array([0])),
+    ts.ckks_vector(public_key, np.array([0])),
+])
+one_hot_encrypted2 = np.array([
+    ts.ckks_vector(public_key, np.array([0])),
+    ts.ckks_vector(public_key, np.array([1])),
+    ts.ckks_vector(public_key, np.array([0]))
+])
+print(type(one_hot_encrypted))
+
+mat_encrypted = np.array(
+    [
+        [
+            ts.ckks_vector(public_key, [1]),
+            ts.ckks_vector(public_key, [2]),
+            ts.ckks_vector(public_key, [3]),
+            ts.ckks_vector(public_key, [4]),
+        ], 
+        [
+            ts.ckks_vector(public_key, [5]),
+            ts.ckks_vector(public_key, [6]),
+            ts.ckks_vector(public_key, [7]),
+            ts.ckks_vector(public_key, [8]),
+        ], 
+        [
+            ts.ckks_vector(public_key, [9]),
+            ts.ckks_vector(public_key, [10]),
+            ts.ckks_vector(public_key, [11]),
+            ts.ckks_vector(public_key, [12]),
+        ], 
+    ]
+)
+print(type(mat_encrypted))
+
+matmul_dot_encrypted = (mat_encrypted @ one_hot_encrypted).dot(one_hot_encrypted2)
+
+matmul_dot_res = ts.lazy_ckks_vector_from(matmul_dot_encrypted.serialize())
+matmul_dot_res.link_context(secret_key)
+print(matmul_dot_res.decrypt()[0])
+
+# Test matrix multiplication with a plain matrix
+mat_unencrypted = np.array(
+    [
+        [1, 2, 3, 4], 
+        [5, 6, 7, 8], 
+        [9, 10, 11, 12], 
+    ]
+)
+plain_matmul_dot_encrypted = (mat_unencrypted @ one_hot_encrypted).dot(one_hot_encrypted2)
+
+plain_matmul_dot_res = ts.lazy_ckks_vector_from(plain_matmul_dot_encrypted.serialize())
+plain_matmul_dot_res.link_context(secret_key)
+print(plain_matmul_dot_res.decrypt()[0])
+
+# Testing with bytes and serialization
+print(type(plain_matmul_dot_encrypted.serialize()))
+print(type(ts.lazy_ckks_vector_from(plain_matmul_dot_encrypted.serialize())))
+# print(print(matmul_dot_encrypted.__dir__()))
+
+matmul_dot_res2 = ts.lazy_ckks_vector_from(matmul_dot_encrypted.serialize())
+matmul_dot_res2.link_context(matmul_dot_encrypted.context())
+matmul_dot_res_square = matmul_dot_res2 * matmul_dot_res2
+matmul_dot_res_square.link_context(secret_key)
+print(matmul_dot_res_square.decrypt()[0])
