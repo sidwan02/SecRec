@@ -1,6 +1,8 @@
 import secure_algos
 import robust_algos
 import tenseal as ts
+import numpy as np
+from support import util
 from typing import Tuple, List
 
 
@@ -137,8 +139,8 @@ class Server:
 
     def receive_rating_pir(
         self, 
-        r: ts.tensors.ckksvector.CKKSVector, 
-        c: ts.tensors.ckksvector.CKKSVector, 
+        r: np.ndarray, 
+        c: np.ndarray, 
         demo: bool
     ) -> bytes:
         predicated_ratings = self.matrix_completion()
@@ -148,4 +150,9 @@ class Server:
         else:
             self.matrices["predicted"] = [[]]
 
-        return predicated_ratings.matmul(c).dot(r)[0]
+        ckks_mat_predicted_ratings = util.convert_bytes_mat_to_ckks_mat(
+            predicated_ratings, 
+            r[0].context()
+        )
+        pir_retrieved_value = (np.array(ckks_mat_predicted_ratings) @ c).dot(r)
+        return pir_retrieved_value.serialize()

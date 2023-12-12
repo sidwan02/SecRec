@@ -157,9 +157,9 @@ class Combiner:
 
         if self.do_pir:
             user_one_hot = [1 if curr_user == user else 0 for curr_user, _ in user_ownership_map.items()]
-            user_one_hot_encrypted = ts.ckks_vector(self.encrypt_pk, user_one_hot)
+            user_one_hot_encrypted = np.array([ts.ckks_vector(self.encrypt_pk, [val]) for val in user_one_hot])
             movie_one_hot = [1 if curr_movie == movie else 0 for curr_movie, _ in movie_ownership_map.items()]
-            movie_one_hot_encrypted = ts.ckks_vector(self.encrypt_pk, movie_one_hot)
+            movie_one_hot_encrypted = np.array([ts.ckks_vector(self.encrypt_pk, [val]) for val in movie_one_hot])
 
             rating_bytes = self.server.receive_rating_pir(
                 user_one_hot_encrypted, movie_one_hot_encrypted, demo

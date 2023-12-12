@@ -129,12 +129,12 @@ def reset_robust_state():
 
 if __name__ == "__main__":
     public_context, secret_context, server, combiner = reset_robust_state()
-    user1 = User("Bob", combiner, public_context, secret_context, True)
+    user1 = User("Bob", combiner, public_context, secret_context, demo_user=True)
 
     ######### TESTS START #########
-    # tenseal_util_test()
-    # combiner.test_server_storage()
-    # test_combiner_rating_logic(server, combiner, public_context, secret_context)
+    tenseal_util_test()
+    combiner.test_server_storage()
+    test_combiner_rating_logic(server, combiner, public_context, secret_context)
     ######### TESTS END #########
 
     public_context, secret_context, server, combiner = reset_robust_state()
