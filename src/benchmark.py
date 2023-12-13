@@ -346,7 +346,6 @@ def noised_secure_matrix_completion_runtime_benchmark(epsilon : float = 0.1, p :
 def secure_insecure_matrix_completion_runtime_benchmark(epsilon : float = 0.1, p : float = 0.2, rows : int = 10, cols : int = 10, min : int = 0, max : int = 5, step : float = 0.5, w_epochs = 10, w_sub_epochs = 5, r = 5, epochs = 20, alpha = 1e-2) -> Tuple[float, float]:
     public_context, secret_context = setup_contexts()
     public_key = ts.context_from(public_context)
-    secret_key = ts.context_from(secret_context)
     
     true_ratings_matrix = generate_ratings_matrix(rows = rows, cols = cols, min=min, max=max, step=step)
     true_boolean_matrix, _ = generate_boolean_matrices(epsilon, p, rows = rows, cols = cols)
@@ -360,6 +359,41 @@ def secure_insecure_matrix_completion_runtime_benchmark(epsilon : float = 0.1, p
 
     insecure_completer = generate_insecure_matrix_completion(r=r, epochs=epochs, alpha=alpha)
     secure_completer = generate_secure_matrix_completion(public_context, secret_context, r=r, epochs=epochs, alpha=alpha)
+
+    # Run training algorithm on both implementations
+
+    insecure_start = time.time()
+    insecure_completer.prepare_data(true_revealed_ratings, true_boolean_matrix)
+    insecure_complete_matrix = insecure_completer.train()
+    insecure_end = time.time()
+
+    secure_start = time.time()
+    secure_completer.prepare_data(encrypted_true_ratings_matrix, encrypted_true_boolean_matrix)
+    scure_complete_matrix = secure_completer.train()
+    secure_end = time.time()
+
+    return insecure_end - insecure_start, secure_end - secure_start
+
+# Measuring runtime for robust matrix completion algorithm on encrypted/non-encrypted data
+# Returns tuple of floats:
+# 1. Runtime taken for robust matrix completion algorithm on non-encrypted data
+# 2. Runtime taken for robust matrix completion algorithm on encrypted data
+def secure_insecure_robust_matrix_completion_runtime_benchmark(epsilon : float = 0.1, p : float = 0.2, rows : int = 10, cols : int = 10, min : int = 0, max : int = 5, step : float = 0.5, w_epochs = 10, w_sub_epochs = 5, r = 5, epochs = 20, alpha = 1e-2) -> Tuple[float, float]:
+    public_context, secret_context = setup_contexts()
+    public_key = ts.context_from(public_context)
+    
+    true_ratings_matrix = generate_ratings_matrix(rows = rows, cols = cols, min=min, max=max, step=step)
+    true_boolean_matrix, _ = generate_boolean_matrices(epsilon, p, rows = rows, cols = cols)
+    true_revealed_ratings = true_ratings_matrix * true_boolean_matrix
+
+    encrypted_true_ratings_matrix = util.encrypt_to_ckks_mat(true_ratings_matrix, public_key)
+    encrypted_true_ratings_matrix = util.convert_ckks_mat_to_bytes_mat(encrypted_true_ratings_matrix)
+
+    encrypted_true_boolean_matrix = util.encrypt_to_ckks_mat(true_boolean_matrix, public_key)
+    encrypted_true_boolean_matrix = util.convert_ckks_mat_to_bytes_mat(encrypted_true_boolean_matrix)
+
+    insecure_completer = generate_insecure_robust_matrix_completion(r=r, epochs=epochs, alpha=alpha)
+    secure_completer = generate_secure_robust_matrix_completion(public_context, secret_context, r=r, epochs=epochs, alpha=alpha)
 
     # Run training algorithm on both implementations
 
@@ -609,7 +643,6 @@ def secure_insecure_matrix_completion_loss_convergence_benchmark(epsilon : float
 def secure_insecure_robust_matrix_completion_loss_convergence_benchmark(epsilon : float = 0.1, p : float = 0.2, rows : int = 10, cols : int = 10, min : int = 0, max : int = 5, step : float = 0.5, w_epochs = 10, w_sub_epochs = 5, r = 5, epochs = 20, alpha = 1e-2) -> Tuple[List[float], List[float]]:
     public_context, secret_context = setup_contexts()
     public_key = ts.context_from(public_context)
-    secret_key = ts.context_from(secret_context)
     
     true_ratings_matrix = generate_ratings_matrix(rows = rows, cols = cols, min=min, max=max, step=step)
     true_boolean_matrix, _ = generate_boolean_matrices(epsilon, p, rows = rows, cols = cols)
