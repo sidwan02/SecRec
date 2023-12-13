@@ -113,7 +113,7 @@ def generate_secure_matrix_completion(public_context : bytes, secret_context : b
 def generate_secure_robust_matrix_completion(public_context : bytes, secret_context : bytes, r : int = 1, epochs : int = 20, alpha : float = 1e-2, w_epochs = 10, w_sub_epochs = 5, loss_list = None) -> robust_algos.RobustSecureMatrixCompletion:
     reset_impl = secure_algos.SecureMatrixErrorReset(public_context, secret_context)
     svd_1d_impl = secure_algos.SecureSVD1D(public_context, secret_context, False)
-    svd_impl = secure_algos.SecureSVD(public_context, secret_context, svd_1d_impl, False)
+    svd_impl = secure_algos.SecureSVD(public_context, secret_context, debug=False)
     clip_impl = secure_algos.SecureClip(public_context, secret_context)
     division_impl = secure_algos.SecureClearDivision(secret_context)
     weight_calculator = robust_algos.SecureRobustWeights(public_context=public_context, secret_context=secret_context, svd_1d_wrapper=svd_1d_impl, epochs=w_epochs, sub_epochs=w_sub_epochs)
@@ -602,6 +602,41 @@ def secure_insecure_matrix_completion_loss_convergence_benchmark(epsilon : float
 
     return unencrypted_losses, encrypted_losses
 
+# Loss convergence for secure versus insecure robust completion on non-noised data (both implementations)
+# Returns tuple of lists:
+# 1. Losses from training insecure robust implementation using non-noised data
+# 2. Losses from training secure robust implementation using non-noised data
+def secure_insecure_robust_matrix_completion_loss_convergence_benchmark(epsilon : float = 0.1, p : float = 0.2, rows : int = 10, cols : int = 10, min : int = 0, max : int = 5, step : float = 0.5, w_epochs = 10, w_sub_epochs = 5, r = 5, epochs = 20, alpha = 1e-2) -> Tuple[List[float], List[float]]:
+    public_context, secret_context = setup_contexts()
+    public_key = ts.context_from(public_context)
+    secret_key = ts.context_from(secret_context)
+    
+    true_ratings_matrix = generate_ratings_matrix(rows = rows, cols = cols, min=min, max=max, step=step)
+    true_boolean_matrix, _ = generate_boolean_matrices(epsilon, p, rows = rows, cols = cols)
+    true_revealed_ratings = true_ratings_matrix * true_boolean_matrix
+
+    encrypted_true_ratings_matrix = util.encrypt_to_ckks_mat(true_ratings_matrix, public_key)
+    encrypted_true_ratings_matrix = util.convert_ckks_mat_to_bytes_mat(encrypted_true_ratings_matrix)
+
+    encrypted_true_boolean_matrix = util.encrypt_to_ckks_mat(true_boolean_matrix, public_key)
+    encrypted_true_boolean_matrix = util.convert_ckks_mat_to_bytes_mat(encrypted_true_boolean_matrix)
+
+    insecure_losses = []
+    secure_losses = []
+
+    insecure_completer = generate_insecure_robust_matrix_completion(r=r, epochs=epochs, alpha=alpha, loss_list=insecure_losses)
+    secure_completer = generate_secure_robust_matrix_completion(public_context, secret_context, r=r, epochs=epochs, alpha=alpha, loss_list=secure_losses)
+
+    # Run training algorithm on both implementations
+    insecure_completer.prepare_data(true_revealed_ratings, true_boolean_matrix)
+    insecure_complete_matrix = insecure_completer.train()
+
+    secure_completer.prepare_data(encrypted_true_ratings_matrix, encrypted_true_boolean_matrix)
+    scure_complete_matrix = secure_completer.train()
+
+    return insecure_losses, secure_losses
+
+
 # Measuring loss convergence in matrix completion between standard matrix completion and robust matrix completion
 # Loss convergence for insecure completion on same, noised data
 # Returns tuple of lists:
@@ -640,8 +675,8 @@ def robust_matrix_completion_loss_convergence_benchmark(epsilon : float = 0.1, p
     true_losses = []
     robust_losses = []
 
-    insecure_completer = generate_insecure_matrix_completion(r=r, epochs=epochs, alpha=alpha)
-    robust_completer = generate_insecure_robust_matrix_completion(w_epochs=w_epochs, w_sub_epochs=w_sub_epochs, r=r, epochs=epochs, alpha=alpha)
+    insecure_completer = generate_insecure_matrix_completion(r=r, epochs=epochs, alpha=alpha, loss_list=true_losses)
+    robust_completer = generate_insecure_robust_matrix_completion(w_epochs=w_epochs, w_sub_epochs=w_sub_epochs, r=r, epochs=epochs, alpha=alpha ,loss_list=robust_losses)
 
     # Run training algorithm on both implementations
     insecure_completer.prepare_data(true_revealed_ratings, true_boolean_matrix)
