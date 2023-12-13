@@ -266,7 +266,7 @@ class InsecureMatrixCompletion:
         self.epochs = epochs
 
         # lr
-        self.alpha: alpha
+        self.alpha = alpha
 
         # proportion of entries contributing to validation instead of training
         self.val_prop = 0.1
